@@ -1,0 +1,28 @@
+export const PLATFORMS = [
+  { id: 'wechat_mp', name: '微信公众号', category: 'content_account', abbr: 'WX', color: '#07c160', hasLogo: true },
+  { id: 'wechat_channels', name: '微信视频号', category: 'short_video', abbr: 'VC', color: '#07c160', hasLogo: false },
+  { id: 'weibo', name: '微博', category: 'social', abbr: 'WB', color: '#e6162d', hasLogo: true },
+  { id: 'douyin', name: '抖音', category: 'short_video', abbr: 'DY', color: '#000000', hasLogo: true },
+  { id: 'kuaishou', name: '快手', category: 'short_video', abbr: 'KS', color: '#ff6f00', hasLogo: true },
+  { id: 'xiaohongshu', name: '小红书', category: 'social', abbr: 'RED', color: '#ff2442', hasLogo: true },
+  { id: 'bilibili', name: '哔哩哔哩', category: 'video', abbr: 'B', color: '#00a1d6', hasLogo: true },
+  { id: 'toutiao', name: '今日头条', category: 'content_account', abbr: 'TT', color: '#ed4040', hasLogo: false },
+  { id: 'xigua', name: '西瓜视频', category: 'video', abbr: 'XG', color: '#f44336', hasLogo: false },
+  { id: 'baijiahao', name: '百家号', category: 'content_account', abbr: 'BJ', color: '#2e6cf6', hasLogo: false },
+  { id: 'penguin', name: '企鹅号', category: 'content_account', abbr: 'Q', color: '#2ca7f8', hasLogo: false },
+  { id: 'dayu_uc', name: '大鱼号', category: 'content_account', abbr: 'DYU', color: '#ff6f00', hasLogo: false },
+  { id: 'wangyi_hao', name: '网易号', category: 'content_account', abbr: 'WY', color: '#d43d3d', hasLogo: false },
+  { id: 'sohu_mp', name: '搜狐号', category: 'content_account', abbr: 'SH', color: '#f5a623', hasLogo: false },
+  { id: 'zhihu', name: '知乎', category: 'social', abbr: 'Z', color: '#1772f6', hasLogo: true },
+  { id: 'jianshu', name: '简书', category: 'content_account', abbr: 'JS', color: '#ea6f5a', hasLogo: false },
+  { id: 'juejin', name: '掘金', category: 'tech_community', abbr: 'JJ', color: '#1e80ff', hasLogo: false },
+  { id: 'csdn', name: 'CSDN', category: 'tech_community', abbr: 'C', color: '#fc5531', hasLogo: false },
+  { id: 'segmentfault', name: 'SegmentFault', category: 'tech_community', abbr: 'SF', color: '#00b35f', hasLogo: false },
+  { id: 'oschina', name: '开源中国', category: 'tech_community', abbr: 'OSC', color: '#2aa515', hasLogo: false },
+  { id: '51cto', name: '51CTO', category: 'tech_community', abbr: '51', color: '#d81921', hasLogo: false },
+  { id: 'v2ex', name: 'V2EX', category: 'forum', abbr: 'V2', color: '#778087', hasLogo: false },
+  { id: 'tieba', name: '贴吧', category: 'forum', abbr: 'TB', color: '#2e6cf6', hasLogo: false },
+  { id: 'douban_group', name: '豆瓣小组', category: 'forum', abbr: 'DB', color: '#2aa515', hasLogo: false }
+]
+
+export const PLATFORM_MAP = PLATFORMS.reduce((acc, p) => { acc[p.id] = p; return acc }, {})

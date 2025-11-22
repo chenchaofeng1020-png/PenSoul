@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Login Flow</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        button { padding: 10px 15px; margin: 5px; }
+        pre { background: #f5f5f5; padding: 10px; overflow-x: auto; }
+        .error { color: red; }
+        .success { color: green; }
+    </style>
+</head>
+<body>
+    <h1>Login Flow Test</h1>
+    
+    <div class="section">
+        <h2>Step 1: Login</h2>
+        <button onclick="testLogin()">Login as testauth</button>
+        <div id="login-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>Step 2: Get Products</h2>
+        <button onclick="testProducts()">Get Products</button>
+        <div id="products-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>Step 3: Get Competitors</h2>
+        <input type="number" id="product-id" placeholder="Product ID" value="12">
+        <button onclick="testCompetitors()">Get Competitors</button>
+        <div id="competitors-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>Current State</h2>
+        <button onclick="showCurrentState()">Show Current State</button>
+        <div id="current-state"></div>
+    </div>
+    
+    <script>
+        let currentToken = null;
+        
+        async function testLogin() {
+            const resultDiv = document.getElementById('login-result');
+            resultDiv.innerHTML = 'Logging in...';
+            
+            try {
+                const response = await fetch('http://localhost:8000/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        username: 'testauth',
+                        password: 'testpass123'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    currentToken = data.data.token;
+                    localStorage.setItem('token', currentToken);
+                    localStorage.setItem('isLoggedIn', 'true');
+                    localStorage.setItem('username', 'testauth');
+                    
+                    resultDiv.innerHTML = `<div class="success">Login successful!</div><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                } else {
+                    resultDiv.innerHTML = `<div class="error">Login failed!</div><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">Login error: ${error.message}</div>`;
+            }
+        }
+        
+        async function testProducts() {
+            const resultDiv = document.getElementById('products-result');
+            const token = currentToken || localStorage.getItem('token');
+            
+            if (!token) {
+                resultDiv.innerHTML = '<div class="error">No token found. Please login first.</div>';
+                return;
+            }
+            
+            resultDiv.innerHTML = 'Loading products...';
+            
+            try {
+                const response = await fetch('http://localhost:8000/api/products', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `<div class="success">Products loaded!</div><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                    
+                    // Auto-fill product ID if available
+                    if (data.success && data.data.products.length > 0) {
+                        document.getElementById('product-id').value = data.data.products[0].id;
+                    }
+                } else {
+                    resultDiv.innerHTML = `<div class="error">Products failed! Status: ${response.status}</div><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">Products error: ${error.message}</div>`;
+            }
+        }
+        
+        async function testCompetitors() {
+            const resultDiv = document.getElementById('competitors-result');
+            const token = currentToken || localStorage.getItem('token');
+            const productId = document.getElementById('product-id').value;
+            
+            if (!token) {
+                resultDiv.innerHTML = '<div class="error">No token found. Please login first.</div>';
+                return;
+            }
+            
+            if (!productId) {
+                resultDiv.innerHTML = '<div class="error">Please enter a product ID.</div>';
+                return;
+            }
+            
+            resultDiv.innerHTML = 'Loading competitors...';
+            
+            try {
+                const response = await fetch(`http://localhost:8000/api/products/${productId}/competitors`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `<div class="success">Competitors loaded!</div><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                } else {
+                    resultDiv.innerHTML = `<div class="error">Competitors failed! Status: ${response.status}</div><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">Competitors error: ${error.message}</div>`;
+            }
+        }
+        
+        function showCurrentState() {
+            const resultDiv = document.getElementById('current-state');
+            
+            const state = {
+                'localStorage.token': localStorage.getItem('token'),
+                'localStorage.isLoggedIn': localStorage.getItem('isLoggedIn'),
+                'localStorage.username': localStorage.getItem('username'),
+                'currentToken': currentToken
+            };
+            
+            resultDiv.innerHTML = `<pre>${JSON.stringify(state, null, 2)}</pre>`;
+        }
+        
+        // Show current state on load
+        window.onload = showCurrentState;
+    </script>
+</body>
+</html>

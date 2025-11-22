@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>产品鸭API测试工具</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .api-section {
+            margin-bottom: 30px;
+            border: 1px solid #e1e5e9;
+            border-radius: 6px;
+            padding: 20px;
+        }
+        .api-title {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #555;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .response {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+        }
+        .error {
+            border-left-color: #dc3545;
+            background: #f8d7da;
+        }
+        .success {
+            border-left-color: #28a745;
+            background: #d4edda;
+        }
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            margin: 0;
+        }
+        .token-display {
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>产品鸭API测试工具</h1>
+        <p>在启动PHP服务器后，使用此工具测试API功能。</p>
+        
+        <div class="token-display" id="tokenDisplay" style="display: none;">
+            <strong>当前Token:</strong>
+            <div id="currentToken"></div>
+        </div>
+
+        <!-- API信息 -->
+        <div class="api-section">
+            <div class="api-title">API信息</div>
+            <button onclick="testApiInfo()">获取API信息</button>
+            <div id="apiInfoResponse" class="response" style="display: none;"></div>
+        </div>
+
+        <!-- 用户注册 -->
+        <div class="api-section">
+            <div class="api-title">用户注册</div>
+            <div class="form-group">
+                <label>用户名:</label>
+                <input type="text" id="regUsername" value="testuser" placeholder="输入用户名">
+            </div>
+            <div class="form-group">
+                <label>邮箱:</label>
+                <input type="email" id="regEmail" value="test@example.com" placeholder="输入邮箱">
+            </div>
+            <div class="form-group">
+                <label>密码:</label>
+                <input type="password" id="regPassword" value="123456" placeholder="输入密码">
+            </div>
+            <div class="form-group">
+                <label>真实姓名:</label>
+                <input type="text" id="regFullName" value="测试用户" placeholder="输入真实姓名">
+            </div>
+            <button onclick="register()">注册</button>
+            <div id="registerResponse" class="response" style="display: none;"></div>
+        </div>
+
+        <!-- 用户登录 -->
+        <div class="api-section">
+            <div class="api-title">用户登录</div>
+            <div class="form-group">
+                <label>登录名 (邮箱或用户名):</label>
+                <input type="text" id="loginName" value="test@example.com" placeholder="输入邮箱或用户名">
+            </div>
+            <div class="form-group">
+                <label>密码:</label>
+                <input type="password" id="loginPassword" value="123456" placeholder="输入密码">
+            </div>
+            <button onclick="login()">登录</button>
+            <div id="loginResponse" class="response" style="display: none;"></div>
+        </div>
+
+        <!-- 获取用户信息 -->
+        <div class="api-section">
+            <div class="api-title">获取用户信息</div>
+            <p>需要先登录获取Token</p>
+            <button onclick="getUserInfo()">获取用户信息</button>
+            <div id="userInfoResponse" class="response" style="display: none;"></div>
+        </div>
+
+        <!-- 健康检查 -->
+        <div class="api-section">
+            <div class="api-title">健康检查</div>
+            <button onclick="healthCheck()">健康检查</button>
+            <div id="healthResponse" class="response" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api';
+        let currentToken = '';
+
+        function showResponse(elementId, response, isError = false) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.className = `response ${isError ? 'error' : 'success'}`;
+            element.innerHTML = `<pre>${JSON.stringify(response, null, 2)}</pre>`;
+        }
+
+        function updateToken(token) {
+            currentToken = token;
+            document.getElementById('currentToken').textContent = token;
+            document.getElementById('tokenDisplay').style.display = 'block';
+        }
+
+        async function apiRequest(endpoint, method = 'GET', data = null, useAuth = false) {
+            const options = {
+                method,
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            };
+
+            if (useAuth && currentToken) {
+                options.headers['Authorization'] = `Bearer ${currentToken}`;
+            }
+
+            if (data) {
+                options.body = JSON.stringify(data);
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`, options);
+                const result = await response.json();
+                return { success: response.ok, data: result };
+            } catch (error) {
+                return { success: false, data: { error: error.message } };
+            }
+        }
+
+        async function testApiInfo() {
+            const result = await apiRequest('/');
+            showResponse('apiInfoResponse', result.data, !result.success);
+        }
+
+        async function register() {
+            const data = {
+                username: document.getElementById('regUsername').value,
+                email: document.getElementById('regEmail').value,
+                password: document.getElementById('regPassword').value,
+                full_name: document.getElementById('regFullName').value
+            };
+
+            const result = await apiRequest('/auth/register', 'POST', data);
+            showResponse('registerResponse', result.data, !result.success);
+            
+            if (result.success && result.data.data && result.data.data.token) {
+                updateToken(result.data.data.token);
+            }
+        }
+
+        async function login() {
+            const data = {
+                login: document.getElementById('loginName').value,
+                password: document.getElementById('loginPassword').value
+            };
+
+            const result = await apiRequest('/auth/login', 'POST', data);
+            showResponse('loginResponse', result.data, !result.success);
+            
+            if (result.success && result.data.data && result.data.data.token) {
+                updateToken(result.data.data.token);
+            }
+        }
+
+        async function getUserInfo() {
+            if (!currentToken) {
+                showResponse('userInfoResponse', { error: '请先登录获取Token' }, true);
+                return;
+            }
+
+            const result = await apiRequest('/auth/me', 'GET', null, true);
+            showResponse('userInfoResponse', result.data, !result.success);
+        }
+
+        async function healthCheck() {
+            const result = await apiRequest('/health');
+            showResponse('healthResponse', result.data, !result.success);
+        }
+    </script>
+</body>
+</html>

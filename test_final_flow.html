@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>最终测试 - testauth用户登录流程</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .step { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .success { background-color: #d4edda; }
+        .error { background-color: #f8d7da; }
+        button { padding: 10px 20px; margin: 5px; }
+        pre { background: #f5f5f5; padding: 10px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>最终测试 - testauth用户登录流程</h1>
+    
+    <div id="step1" class="step">
+        <h3>步骤1: 清除本地存储</h3>
+        <button onclick="clearStorage()">清除存储</button>
+        <div id="clearResult"></div>
+    </div>
+    
+    <div id="step2" class="step">
+        <h3>步骤2: 登录testauth用户</h3>
+        <button onclick="loginTestAuth()">登录testauth</button>
+        <div id="loginResult"></div>
+    </div>
+    
+    <div id="step3" class="step">
+        <h3>步骤3: 获取用户产品</h3>
+        <button onclick="getProducts()">获取产品</button>
+        <div id="productsResult"></div>
+    </div>
+    
+    <div id="step4" class="step">
+        <h3>步骤4: 获取竞品数据</h3>
+        <button onclick="getCompetitors()">获取竞品</button>
+        <div id="competitorsResult"></div>
+    </div>
+    
+    <div id="step5" class="step">
+        <h3>步骤5: 打开前端应用</h3>
+        <button onclick="openApp()">打开应用</button>
+        <p>点击后会在新窗口打开前端应用，请检查竞品数据是否显示</p>
+    </div>
+
+    <script>
+        let token = null;
+        let productId = null;
+        
+        function clearStorage() {
+            localStorage.clear();
+            document.getElementById('clearResult').innerHTML = '<span style="color: green;">✅ 本地存储已清除</span>';
+        }
+        
+        async function loginTestAuth() {
+            try {
+                const response = await fetch('http://localhost:8000/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        login: 'testauth',
+                        password: 'testpass123'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    token = data.data.token;
+                    localStorage.setItem('isLoggedIn', 'true');
+                    localStorage.setItem('username', 'testauth');
+                    localStorage.setItem('token', token);
+                    
+                    document.getElementById('loginResult').innerHTML = `
+                        <span style="color: green;">✅ 登录成功</span>
+                        <pre>Token: ${token.substring(0, 50)}...</pre>
+                    `;
+                } else {
+                    throw new Error(data.message || '登录失败');
+                }
+            } catch (error) {
+                document.getElementById('loginResult').innerHTML = `
+                    <span style="color: red;">❌ 登录失败: ${error.message}</span>
+                `;
+            }
+        }
+        
+        async function getProducts() {
+            if (!token) {
+                document.getElementById('productsResult').innerHTML = '<span style="color: red;">❌ 请先登录</span>';
+                return;
+            }
+            
+            try {
+                const response = await fetch('http://localhost:8000/api/products', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.data && data.data.length > 0) {
+                    productId = data.data[0].id;
+                    document.getElementById('productsResult').innerHTML = `
+                        <span style="color: green;">✅ 获取产品成功</span>
+                        <pre>产品ID: ${productId}\n产品名称: ${data.data[0].name}</pre>
+                    `;
+                } else {
+                    throw new Error('没有找到产品数据');
+                }
+            } catch (error) {
+                document.getElementById('productsResult').innerHTML = `
+                    <span style="color: red;">❌ 获取产品失败: ${error.message}</span>
+                `;
+            }
+        }
+        
+        async function getCompetitors() {
+            if (!token || !productId) {
+                document.getElementById('competitorsResult').innerHTML = '<span style="color: red;">❌ 请先登录并获取产品</span>';
+                return;
+            }
+            
+            try {
+                const response = await fetch(`http://localhost:8000/api/products/${productId}/competitors`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.data) {
+                    const competitors = data.data;
+                    document.getElementById('competitorsResult').innerHTML = `
+                        <span style="color: green;">✅ 获取竞品成功 (${competitors.length}个)</span>
+                        <pre>${JSON.stringify(competitors.map(c => ({id: c.id, name: c.name})), null, 2)}</pre>
+                    `;
+                } else {
+                    throw new Error(data.message || '获取竞品失败');
+                }
+            } catch (error) {
+                document.getElementById('competitorsResult').innerHTML = `
+                    <span style="color: red;">❌ 获取竞品失败: ${error.message}</span>
+                `;
+            }
+        }
+        
+        function openApp() {
+            window.open('http://localhost:5173', '_blank');
+        }
+    </script>
+</body>
+</html>

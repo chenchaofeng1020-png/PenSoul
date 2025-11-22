@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Frontend Debug</title>
+</head>
+<body>
+    <h1>Frontend Debug Tool</h1>
+    <div id="debug-info"></div>
+    
+    <script>
+        function debugFrontend() {
+            const debugInfo = document.getElementById('debug-info');
+            
+            const info = {
+                'localStorage token': localStorage.getItem('token'),
+                'localStorage isLoggedIn': localStorage.getItem('isLoggedIn'),
+                'localStorage username': localStorage.getItem('username'),
+                'Current URL': window.location.href
+            };
+            
+            let html = '<h2>LocalStorage Info:</h2>';
+            for (const [key, value] of Object.entries(info)) {
+                html += `<p><strong>${key}:</strong> ${value || 'null'}</p>`;
+            }
+            
+            // Test API calls
+            html += '<h2>API Test Results:</h2>';
+            html += '<div id="api-results">Testing...</div>';
+            
+            debugInfo.innerHTML = html;
+            
+            // Test products API
+            testProductsAPI();
+        }
+        
+        async function testProductsAPI() {
+            const resultsDiv = document.getElementById('api-results');
+            const token = localStorage.getItem('token');
+            
+            if (!token) {
+                resultsDiv.innerHTML = '<p style="color: red;">No token found - user needs to login</p>';
+                return;
+            }
+            
+            try {
+                // Test products API
+                const response = await fetch('http://localhost:8000/api/products', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                let html = `<p><strong>Products API Status:</strong> ${response.status}</p>`;
+                html += `<p><strong>Products API Response:</strong></p>`;
+                html += `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+                
+                if (data.success && data.data.products.length > 0) {
+                    const firstProduct = data.data.products[0];
+                    html += `<p><strong>First Product ID:</strong> ${firstProduct.id}</p>`;
+                    
+                    // Test competitors API for first product
+                    const competitorsResponse = await fetch(`http://localhost:8000/api/products/${firstProduct.id}/competitors`, {
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    const competitorsData = await competitorsResponse.json();
+                    
+                    html += `<p><strong>Competitors API Status:</strong> ${competitorsResponse.status}</p>`;
+                    html += `<p><strong>Competitors API Response:</strong></p>`;
+                    html += `<pre>${JSON.stringify(competitorsData, null, 2)}</pre>`;
+                }
+                
+                resultsDiv.innerHTML = html;
+                
+            } catch (error) {
+                resultsDiv.innerHTML = `<p style="color: red;">API Error: ${error.message}</p>`;
+            }
+        }
+        
+        // Run debug on page load
+        window.onload = debugFrontend;
+    </script>
+</body>
+</html>

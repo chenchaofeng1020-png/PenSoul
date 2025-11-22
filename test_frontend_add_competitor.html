@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试前端添加竞品功能</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .form-group { margin: 10px 0; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, textarea { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 3px; }
+        button { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .result { margin-top: 10px; padding: 10px; border-radius: 3px; }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>前端添加竞品功能测试</h1>
+        
+        <div class="section">
+            <h2>1. 用户登录</h2>
+            <div class="form-group">
+                <label>用户名或邮箱:</label>
+                <input type="text" id="loginUsername" placeholder="输入用户名或邮箱">
+            </div>
+            <div class="form-group">
+                <label>密码:</label>
+                <input type="password" id="loginPassword" placeholder="输入密码">
+            </div>
+            <button onclick="testLogin()">登录</button>
+            <div id="loginResult" class="result" style="display: none;"></div>
+        </div>
+        
+        <div class="section">
+            <h2>2. 获取产品列表</h2>
+            <button onclick="getProducts()">获取产品列表</button>
+            <div id="productsResult" class="result" style="display: none;"></div>
+        </div>
+        
+        <div class="section">
+            <h2>3. 添加竞品</h2>
+            <div class="form-group">
+                <label>产品ID:</label>
+                <input type="text" id="productId" placeholder="从上面获取的产品ID">
+            </div>
+            <div class="form-group">
+                <label>竞品名称:</label>
+                <input type="text" id="competitorName" placeholder="输入竞品名称">
+            </div>
+            <div class="form-group">
+                <label>竞品描述:</label>
+                <textarea id="competitorDescription" placeholder="输入竞品描述"></textarea>
+            </div>
+            <div class="form-group">
+                <label>网站URL:</label>
+                <input type="text" id="competitorWebsite" placeholder="输入网站URL">
+            </div>
+            <button onclick="addCompetitor()">添加竞品</button>
+            <div id="addCompetitorResult" class="result" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        let authToken = null;
+        
+        function showResult(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.className = `result ${type}`;
+            element.innerHTML = message;
+            element.style.display = 'block';
+        }
+        
+        async function testLogin() {
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+            
+            if (!username || !password) {
+                showResult('loginResult', '请输入用户名和密码', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('http://localhost:8000/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        login: username,
+                        password: password
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    authToken = data.data.token;
+                    showResult('loginResult', `登录成功！用户: ${data.data.user.username}`, 'success');
+                } else {
+                    showResult('loginResult', `登录失败: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                showResult('loginResult', `登录错误: ${error.message}`, 'error');
+            }
+        }
+        
+        async function getProducts() {
+            if (!authToken) {
+                showResult('productsResult', '请先登录', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('http://localhost:8000/api/products', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    const products = data.data.products || [];
+                    let resultHtml = `<strong>获取到 ${products.length} 个产品:</strong><br>`;
+                    products.forEach(product => {
+                        resultHtml += `ID: ${product.id}, 名称: ${product.name}<br>`;
+                        // 自动填充第一个产品ID
+                        if (products.indexOf(product) === 0) {
+                            document.getElementById('productId').value = product.id;
+                        }
+                    });
+                    showResult('productsResult', resultHtml, 'success');
+                } else {
+                    showResult('productsResult', `获取产品失败: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                showResult('productsResult', `获取产品错误: ${error.message}`, 'error');
+            }
+        }
+        
+        async function addCompetitor() {
+            if (!authToken) {
+                showResult('addCompetitorResult', '请先登录', 'error');
+                return;
+            }
+            
+            const productId = document.getElementById('productId').value;
+            const name = document.getElementById('competitorName').value;
+            const description = document.getElementById('competitorDescription').value;
+            const website = document.getElementById('competitorWebsite').value;
+            
+            if (!productId || !name) {
+                showResult('addCompetitorResult', '请填写产品ID和竞品名称', 'error');
+                return;
+            }
+            
+            try {
+                const competitorData = {
+                    name: name,
+                    slogan: '',
+                    description: description || '',
+                    website_url: website || '',
+                    documentation_url: '',
+                    logo_url: '',
+                    main_customers: ''
+                };
+                
+                console.log('发送竞品数据:', competitorData);
+                
+                const response = await fetch(`http://localhost:8000/api/products/${productId}/competitors`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(competitorData)
+                });
+                
+                const data = await response.json();
+                
+                console.log('服务器响应:', data);
+                
+                if (response.ok && data.success) {
+                    showResult('addCompetitorResult', `添加竞品成功！竞品ID: ${data.data.id}`, 'success');
+                    // 清空表单
+                    document.getElementById('competitorName').value = '';
+                    document.getElementById('competitorDescription').value = '';
+                    document.getElementById('competitorWebsite').value = '';
+                } else {
+                    showResult('addCompetitorResult', `添加竞品失败: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                console.error('添加竞品错误:', error);
+                showResult('addCompetitorResult', `添加竞品错误: ${error.message}`, 'error');
+            }
+        }
+    </script>
+</body>
+</html>

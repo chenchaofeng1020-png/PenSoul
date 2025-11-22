@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>AI导师 - 产品路线图</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .header { text-align: center; margin-bottom: 30px; }
+        .product-name { font-size: 24px; font-weight: bold; color: #333; }
+        .export-date { color: #666; margin-top: 10px; }
+        .roadmap-item { 
+            border: 1px solid #ddd; 
+            margin: 15px 0; 
+            padding: 15px; 
+            border-radius: 5px; 
+        }
+        .item-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; }
+        .item-meta { display: flex; gap: 20px; margin-bottom: 10px; }
+        .meta-item { font-size: 14px; color: #666; }
+        .item-description { margin-top: 10px; line-height: 1.5; }
+        .status-planned { background-color: #e3f2fd; }
+        .status-in_progress { background-color: #fff3e0; }
+        .status-completed { background-color: #e8f5e8; }
+        .status-cancelled { background-color: #ffebee; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="product-name">AI导师 - 产品路线图</div>
+        <div class="export-date">导出时间: 2025-10-06 16:30:02</div>
+    </div>
+    <div class="roadmap-item status-planned">
+        <div class="item-title">查哈哈哈哈哈啊 </div>
+        <div class="item-meta">
+            <div class="meta-item"><strong>类型:</strong> Task</div>
+            <div class="meta-item"><strong>状态:</strong> planned</div>
+            <div class="meta-item"><strong>优先级:</strong> medium</div>
+            <div class="meta-item"><strong>进度:</strong> 0%</div>
+        </div>
+        <div class="item-meta">
+            <div class="meta-item"><strong>开始时间:</strong> 2025-10-15</div>
+            <div class="meta-item"><strong>结束时间:</strong> 2025-10-30</div>
+            <div class="meta-item"><strong>负责人:</strong> testuser1755393363</div>
+        </div><div class="item-description"><strong>描述:</strong> 哈哈哈哈</div></div>
+    <div class="roadmap-item status-planned">
+        <div class="item-title">测试测试111</div>
+        <div class="item-meta">
+            <div class="meta-item"><strong>类型:</strong> Task</div>
+            <div class="meta-item"><strong>状态:</strong> planned</div>
+            <div class="meta-item"><strong>优先级:</strong> medium</div>
+            <div class="meta-item"><strong>进度:</strong> 0%</div>
+        </div>
+        <div class="item-meta">
+            <div class="meta-item"><strong>开始时间:</strong> 未设置</div>
+            <div class="meta-item"><strong>结束时间:</strong> 未设置</div>
+            <div class="meta-item"><strong>负责人:</strong> testuser1755393363</div>
+        </div><div class="item-description"><strong>描述:</strong> 忘打卡了解</div></div>
+    <div class="roadmap-item status-planned">
+        <div class="item-title">无敌了啊啊啊</div>
+        <div class="item-meta">
+            <div class="meta-item"><strong>类型:</strong> Task</div>
+            <div class="meta-item"><strong>状态:</strong> planned</div>
+            <div class="meta-item"><strong>优先级:</strong> medium</div>
+            <div class="meta-item"><strong>进度:</strong> 0%</div>
+        </div>
+        <div class="item-meta">
+            <div class="meta-item"><strong>开始时间:</strong> 未设置</div>
+            <div class="meta-item"><strong>结束时间:</strong> 未设置</div>
+            <div class="meta-item"><strong>负责人:</strong> testuser1755393363</div>
+        </div></div>
+    <div class="roadmap-item status-planned">
+        <div class="item-title">离开了就</div>
+        <div class="item-meta">
+            <div class="meta-item"><strong>类型:</strong> Task</div>
+            <div class="meta-item"><strong>状态:</strong> planned</div>
+            <div class="meta-item"><strong>优先级:</strong> medium</div>
+            <div class="meta-item"><strong>进度:</strong> 0%</div>
+        </div>
+        <div class="item-meta">
+            <div class="meta-item"><strong>开始时间:</strong> 未设置</div>
+            <div class="meta-item"><strong>结束时间:</strong> 未设置</div>
+            <div class="meta-item"><strong>负责人:</strong> testuser1755393363</div>
+        </div></div>
+</body>
+</html>

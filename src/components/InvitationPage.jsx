@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { productDuckLogo } from '../assets/logos'
 import { UserPlus, Shield, Edit, Eye, CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react'
 
 const InvitationPage = ({ token, onLogin }) => {
@@ -164,7 +165,7 @@ const InvitationPage = ({ token, onLogin }) => {
             <h1 className="text-2xl font-bold text-gray-900 mb-2">邀请无效</h1>
             <p className="text-gray-600 mb-6">{error}</p>
             <button
-              onClick={() => navigate('/')}
+              onClick={() => { window.location.href = '/' }}
               className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
             >
               返回首页

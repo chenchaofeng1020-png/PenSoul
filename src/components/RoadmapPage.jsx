@@ -1221,11 +1221,7 @@ const CurvedTimelineView = ({
         </div>
       </div>
 
-      {loading ? (
-        <div className="text-sm text-gray-500">加载中...</div>
-      ) : (!initialLoad && items.length === 0 && (
-        <div className="text-sm text-gray-500">暂无数据</div>
-      ))}
+      
 
       <div className="relative" style={{ width: '100%', minHeight: svgHeightPx + 60 }}>
         {/* 时间刻度背景 */}

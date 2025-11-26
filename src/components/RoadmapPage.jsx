@@ -626,19 +626,22 @@ const AddRoadmapItemModal = ({ onClose, onSubmit, currentProduct }) => {
     try {
       setLoadingMembers(true)
       const token = localStorage.getItem('token')
-      const response = await fetch(`http://localhost:8000/api/products/${currentProduct.id}/members`, {
+      const base = (import.meta?.env?.VITE_API_BASE || '').trim() || ''
+      const url = `${base}/api/products/${currentProduct.id}/members`
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        setTeamMembers(data.data.members || [])
-      } else {
-        console.error('获取团队成员失败')
+      const ct = response.headers.get('content-type') || ''
+      if (!response.ok || !ct.includes('application/json')) {
+        setTeamMembers([])
+        return
       }
+      const data = await response.json()
+      setTeamMembers(data.data?.members || [])
     } catch (err) {
       console.error('获取团队成员失败:', err)
     } finally {

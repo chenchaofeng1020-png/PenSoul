@@ -1,37 +1,12 @@
-import { useState, useEffect, lazy, Suspense } from 'react'
-import { X, Lightbulb, Clock, Globe, ChevronDown } from 'lucide-react'
-const RichTextEditorLazy = lazy(() => import('./RichTextEditor'))
+import { useState, useEffect } from 'react'
+import { X, Clock, ChevronDown } from 'lucide-react'
 import { PLATFORMS } from '../constants/platforms'
 
-// 预设内容主题数据
-const CONTENT_THEMES = {
-  'beauty': [
-    { id: 1, title: '产品试用分享', platforms: ['xiaohongshu', 'douyin'], timeSlots: ['20:00-22:00'], contentType: 'video', description: '真实体验产品效果，适合视觉化展示' },
-    { id: 2, title: '化妆教程步骤', platforms: ['xiaohongshu', 'bilibili'], timeSlots: ['14:00-16:00'], contentType: 'image', description: '详细的化妆步骤教学，适合长图文' },
-    { id: 3, title: '成分科普解析', platforms: ['wechat_mp', 'zhihu'], timeSlots: ['12:00-13:00'], contentType: 'article', description: '专业成分分析，适合深度内容' },
-    { id: 4, title: '用户前后对比', platforms: ['douyin', 'weibo'], timeSlots: ['19:00-21:00'], contentType: 'video', description: '用户使用前后效果对比' }
-  ],
-  'saas': [
-    { id: 5, title: '产品功能更新', platforms: ['wechat_mp', 'weibo'], timeSlots: ['10:00-11:00'], contentType: 'article', description: '新功能介绍和使用说明' },
-    { id: 6, title: '客户成功案例', platforms: ['wechat_mp', 'xiaohongshu'], timeSlots: ['14:00-15:00'], contentType: 'article', description: '客户使用效果和反馈分享' },
-    { id: 7, title: '行业趋势解读', platforms: ['zhihu', 'wechat_mp'], timeSlots: ['21:00-22:00'], contentType: 'article', description: '行业分析和趋势预测' },
-    { id: 8, title: '使用技巧分享', platforms: ['douyin', 'bilibili'], timeSlots: ['20:00-21:00'], contentType: 'video', description: '产品使用技巧和最佳实践' }
-  ],
-  'food': [
-    { id: 9, title: '菜品制作过程', platforms: ['douyin', 'xiaohongshu'], timeSlots: ['18:00-19:00'], contentType: 'video', description: '美食制作过程展示' },
-    { id: 10, title: '店铺环境展示', platforms: ['xiaohongshu', 'weibo'], timeSlots: ['11:00-12:00'], contentType: 'image', description: '餐厅环境和氛围展示' },
-    { id: 11, title: '顾客用餐反馈', platforms: ['xiaohongshu', 'douyin'], timeSlots: ['12:30-13:30'], contentType: 'video', description: '顾客真实用餐体验和评价' },
-    { id: 12, title: '特色菜品推荐', platforms: ['wechat_mp', 'xiaohongshu'], timeSlots: ['17:00-18:00'], contentType: 'image', description: '招牌菜品介绍和推荐' }
-  ]
-}
+// 预设内容主题数据（移除以统一编辑与新建字段）
+const CONTENT_THEMES = {}
 
 // 节日营销日历
-const FESTIVAL_CALENDAR = [
-  { date: '2024-03-08', name: '妇女节', type: 'festival', contentDirections: ['女性力量', '产品女性用户故事', '女性相关功能'], platforms: ['all'], preparationDays: 7 },
-  { date: '2024-05-01', name: '劳动节', type: 'festival', contentDirections: ['劳动精神', '团队工作日常', '产品制作过程'], platforms: ['all'], preparationDays: 5 },
-  { date: '2024-06-18', name: '618购物节', type: 'shopping', contentDirections: ['促销活动', '产品优惠', '用户抢购'], platforms: ['xiaohongshu', 'douyin', 'weibo'], preparationDays: 14 },
-  { date: '2024-11-11', name: '双11购物节', type: 'shopping', contentDirections: ['年度大促', '产品推荐', '用户反馈'], platforms: ['all'], preparationDays: 21 }
-]
+const FESTIVAL_CALENDAR = []
 
 // 平台最佳发布时间
 const PLATFORM_TIMING = {
@@ -57,44 +32,13 @@ const PLATFORM_TIMING = {
   ]
 }
 
-export default function AddContentItemModalEnhanced({ onClose, onSubmit, currentProduct, mode = 'create', initialItem = null }){
-  const [form, setForm] = useState({ platform:'', title:'', body:'', schedule_at:'', status:'writing' })
+export default function AddContentItemModalEnhanced({ onClose, onSubmit, currentProduct, mode = 'create', initialItem = null, defaultScheduleAt = '' }){
+  const [form, setForm] = useState({ platform:'', topic_title:'', schedule_at:'', status:'not_started' })
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [showThemeSuggestions, setShowThemeSuggestions] = useState(false)
   const [showTimeSuggestions, setShowTimeSuggestions] = useState(false)
-  const [selectedIndustry, setSelectedIndustry] = useState('')
-  const [suggestedThemes, setSuggestedThemes] = useState([])
-  const [upcomingFestivals, setUpcomingFestivals] = useState([])
   const [scheduleConflicts, setScheduleConflicts] = useState([])
 
-  // 获取当前产品相关的节日
-  useEffect(() => {
-    const today = new Date()
-    const next30Days = FESTIVAL_CALENDAR.filter(festival => {
-      const festivalDate = new Date(festival.date)
-      const diffTime = festivalDate - today
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-      return diffDays >= 0 && diffDays <= 30
-    })
-    setUpcomingFestivals(next30Days)
-  }, [])
-
-  // 根据行业获取内容主题建议
-  const getThemeSuggestions = (industry) => {
-    if (!industry || !CONTENT_THEMES[industry]) return []
-    return CONTENT_THEMES[industry]
-  }
-
-  // 应用主题建议到表单
-  const applyThemeSuggestion = (theme) => {
-    setForm({
-      ...form,
-      title: theme.title,
-      body: theme.description,
-      platform: theme.platforms[0] // 默认选择第一个推荐平台
-    })
-    setShowThemeSuggestions(false)
-  }
+  
 
   // 获取平台最佳发布时间建议
   const getTimeSuggestions = (platform) => {
@@ -102,24 +46,44 @@ export default function AddContentItemModalEnhanced({ onClose, onSubmit, current
     return PLATFORM_TIMING[platform]
   }
 
+  const normalizePlatform = (value) => {
+    if (!value) return ''
+    const v = String(value).trim()
+    const byId = PLATFORMS.find(p => (p.id || '').toLowerCase() === v.toLowerCase())
+    if (byId) return byId.id
+    const byName = PLATFORMS.find(p => p.name === v)
+    if (byName) return byName.id
+    const byAbbr = PLATFORMS.find(p => (p.abbr || '').toLowerCase() === v.toLowerCase())
+    if (byAbbr) return byAbbr.id
+    return ''
+  }
+
   // 应用时间建议到表单
   const applyTimeSuggestion = (timeSlot, dayType) => {
-    const today = new Date()
-    let targetDate = new Date(today)
-    
-    if (dayType === 'weekday') {
-      // 找到下一个工作日
-      while (targetDate.getDay() === 0 || targetDate.getDay() === 6) {
-        targetDate.setDate(targetDate.getDate() + 1)
+    // 优先使用已有的日期（来自日历格预填或用户选择），仅覆盖时间
+    const base = form.schedule_at || defaultScheduleAt
+    let targetDate
+    if (base && typeof base === 'string') {
+      // base 形如 YYYY-MM-DD 或 YYYY-MM-DDTHH:mm
+      const [datePart] = base.split('T')
+      const [y, m, d] = datePart.split('-').map(n => parseInt(n, 10))
+      targetDate = new Date(y, (m - 1), d)
+    } else {
+      const today = new Date()
+      targetDate = new Date(today)
+      if (dayType === 'weekday') {
+        // 找到下一个工作日
+        while (targetDate.getDay() === 0 || targetDate.getDay() === 6) {
+          targetDate.setDate(targetDate.getDate() + 1)
+        }
       }
     }
-    
+
     const [startTime] = timeSlot.split('-')
     const [hours, minutes] = startTime.split(':')
-    targetDate.setHours(parseInt(hours), parseInt(minutes), 0, 0)
-    
-    // 格式化日期时间为datetime-local输入格式
-    const formattedDateTime = targetDate.toISOString().slice(0, 16)
+    targetDate.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0)
+
+    const formattedDateTime = new Date(targetDate.getTime() - targetDate.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
     setForm({ ...form, schedule_at: formattedDateTime })
     setShowTimeSuggestions(false)
   }
@@ -150,7 +114,7 @@ export default function AddContentItemModalEnhanced({ onClose, onSubmit, current
     }
   }, [form.schedule_at, form.platform, checkScheduleConflicts])
 
-  // 预填充编辑模式表单
+  // 预填充编辑模式表单或来自日历的默认日期
   useEffect(() => {
     if (mode === 'edit' && initialItem) {
       const toInput = (ts) => {
@@ -164,12 +128,17 @@ export default function AddContentItemModalEnhanced({ onClose, onSubmit, current
         return `${y}-${m}-${day}T${hh}:${mm}`
       }
       setForm({
-        platform: initialItem.platform || '',
-        title: initialItem.title || '',
-        body: initialItem.body || '',
+        platform: normalizePlatform(initialItem.platform),
+        topic_title: (initialItem.topic_title || initialItem.title || ''),
         schedule_at: toInput(initialItem.schedule_at),
-        status: initialItem.status || 'writing',
+        status: initialItem.status || 'not_started',
       })
+    } else if (defaultScheduleAt && !form.schedule_at) {
+      // defaultScheduleAt: 形如 YYYY-MM-DD
+      const [y, m, d] = defaultScheduleAt.split('-').map(n => parseInt(n, 10))
+      const base = new Date(y, (m - 1), d)
+      const formatted = new Date(base.getTime() - base.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+      setForm(f => ({ ...f, schedule_at: formatted }))
     }
   }, [mode, initialItem])
 
@@ -177,101 +146,23 @@ export default function AddContentItemModalEnhanced({ onClose, onSubmit, current
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
       <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <div className="text-lg font-semibold">{mode==='edit' ? '编辑内容计划' : '新建内容计划'}</div>
+          <div className="text-lg font-semibold">{mode==='edit' ? '编辑选题' : '新建计划'}</div>
           <button onClick={isSubmitting ? undefined : onClose} disabled={isSubmitting} className="p-2 hover:bg-gray-100 rounded-lg disabled:opacity-50"><X className="w-4 h-4"/></button>
         </div>
         <div className="flex-1 overflow-y-auto px-6">
-        <div className="mt-3 mb-6 p-4 bg-blue-50 rounded-lg">
-          <div className="flex items-center space-x-2 mb-3">
-            <Lightbulb className="w-5 h-5 text-blue-600" />
-            <span className="font-medium text-blue-900">内容灵感建议</span>
-          </div>
-          
-          {/* 行业选择 */}
-          <div className="mb-3">
-            <label className="text-sm text-gray-700 mb-1 block">选择您的行业</label>
-            <select 
-              value={selectedIndustry} 
-              onChange={(e) => {
-                setSelectedIndustry(e.target.value)
-                const themes = getThemeSuggestions(e.target.value)
-                setSuggestedThemes(themes)
-                setShowThemeSuggestions(themes.length > 0)
-              }} 
-              className="w-full border border-gray-100 rounded-lg px-3 py-2 text-sm"
-            >
-              <option value="">选择行业获取内容建议</option>
-              <option value="beauty">美妆护肤</option>
-              <option value="saas">SaaS软件</option>
-              <option value="food">餐饮美食</option>
-            </select>
-          </div>
-
-          {/* 主题建议 */}
-          {showThemeSuggestions && suggestedThemes.length > 0 && (
-            <div className="mb-3">
-              <label className="text-sm text-gray-700 mb-2 block">推荐内容主题</label>
-              <div className="space-y-2">
-                {suggestedThemes.map(theme => (
-                  <div key={theme.id} className="flex items-center justify-between p-2 bg-white rounded border border-gray-100">
-                    <div className="flex-1">
-                      <div className="font-medium text-sm">{theme.title}</div>
-                      <div className="text-xs text-gray-600">{theme.description}</div>
-                      <div className="flex items-center space-x-2 mt-1">
-                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                          {PLATFORMS.find(p => p.id === theme.platforms[0])?.name}
-                        </span>
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                          {theme.timeSlots[0]}
-                        </span>
-                      </div>
-                    </div>
-                    <button 
-                      onClick={() => applyThemeSuggestion(theme)}
-                      className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
-                    >
-                      使用
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* 节日营销提醒 */}
-          {upcomingFestivals.length > 0 && (
-            <div className="mb-3">
-              <label className="text-sm text-gray-700 mb-2 block">近期节日营销机会</label>
-              <div className="space-y-2">
-                {upcomingFestivals.map(festival => {
-                  const daysUntil = Math.ceil((new Date(festival.date) - new Date()) / (1000 * 60 * 60 * 24))
-                  return (
-                    <div key={festival.date} className="flex items-center justify-between p-2 bg-orange-50 rounded border border-orange-100">
-                      <div>
-                        <div className="font-medium text-sm">{festival.name}</div>
-                        <div className="text-xs text-gray-600">{daysUntil}天后 · {festival.contentDirections.join('、')}</div>
-                      </div>
-                      <button 
-                        onClick={() => {
-                          setForm({
-                            ...form,
-                            title: `${festival.name}营销活动`,
-                            body: festival.contentDirections[0] || '节日营销内容'
-                          })
-                        }}
-                        className="px-3 py-1 bg-orange-600 text-white text-xs rounded hover:bg-orange-700"
-                      >
-                        创建
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-        </div>
         
-        <div className="space-y-4">
+        
+        <div className="space-y-4 my-4">
+          <div>
+            <label className="text-sm text-gray-700">选题内容</label>
+            <input 
+              value={form.topic_title} 
+              onChange={(e)=>setForm({...form, topic_title: e.target.value})} 
+              placeholder={'输入选题方向/主题'}
+              className="w-full border border-gray-100 rounded-lg px-3 py-2"
+            />
+          </div>
+
           {/* 平台选择 + 时间建议 */}
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -371,75 +262,18 @@ export default function AddContentItemModalEnhanced({ onClose, onSubmit, current
               onChange={(e)=> setForm({ ...form, status: e.target.value })}
               className="w-full border border-gray-100 rounded-lg px-3 py-2"
             >
+              <option value="not_started">未开始</option>
               <option value="writing">撰写中</option>
-              <option value="review">待审核</option>
+              <option value="pending_publish">待发布</option>
               <option value="published">已发布</option>
             </select>
           </div>
 
-          {/* 平台适配提醒 */}
-          {form.platform && (
-            <div className="p-3 bg-yellow-50 border border-yellow-100 rounded-lg">
-              <div className="flex items-center space-x-2 mb-2">
-                <Globe className="w-4 h-4 text-yellow-600" />
-                <span className="text-sm font-medium text-yellow-800">平台适配提醒</span>
-              </div>
-              <div className="text-sm text-yellow-700">
-                {form.platform === 'wechat_mp' && (
-                  <div>
-                    <div>• 标题建议10-20字，避免标题党</div>
-                    <div>• 封面图建议900×500像素</div>
-                    <div>• 正文字数1500-3000字为佳</div>
-                  </div>
-                )}
-                {form.platform === 'xiaohongshu' && (
-                  <div>
-                    <div>• 标题要包含关键词，可加emoji</div>
-                    <div>• 图片比例3:4，首图要精美</div>
-                    <div>• 正文前20字很重要</div>
-                  </div>
-                )}
-                {form.platform === 'douyin' && (
-                  <div>
-                    <div>• 视频时长15-60秒最佳</div>
-                    <div>• 竖版9:16比例</div>
-                    <div>• 封面要吸引人</div>
-                  </div>
-                )}
-                {form.platform === 'weibo' && (
-                  <div>
-                    <div>• 文字+配图形式</div>
-                    <div>• 可添加话题标签</div>
-                    <div>• 适合热点讨论</div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div>
-            <label className="text-sm text-gray-700">标题</label>
-            <input 
-              value={form.title} 
-              onChange={(e)=>setForm({...form, title: e.target.value})} 
-              placeholder="输入内容标题"
-              className="w-full border border-gray-100 rounded-lg px-3 py-2"
-            />
-          </div>
           
-          <div>
-            <label className="text-sm text-gray-700">正文</label>
-            <div className="border border-gray-100 rounded-lg">
-              <Suspense fallback={<div className="p-3 text-sm text-gray-500">编辑器加载中...</div>}>
-                <RichTextEditorLazy
-                  initialContent={form.body}
-                  onChange={(content) => setForm({...form, body: content})}
-                  placeholder="输入内容正文，支持富文本格式"
-                  height="200px"
-                />
-              </Suspense>
-            </div>
-          </div>
+
+          
+          
+          
         </div>
         </div>
         

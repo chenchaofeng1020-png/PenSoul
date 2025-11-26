@@ -12,6 +12,7 @@ const TeamMemberPage = ({ currentProduct }) => {
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [showMemberDetail, setShowMemberDetail] = useState(false)
   const [selectedMember, setSelectedMember] = useState(null)
+  const API_BASE = (import.meta?.env?.VITE_API_BASE || '').trim()
 
   useEffect(() => {
     if (currentProduct?.id) {
@@ -24,20 +25,23 @@ const TeamMemberPage = ({ currentProduct }) => {
     try {
       setLoading(true)
       const token = localStorage.getItem('token')
-      const response = await fetch(`http://localhost:8000/api/products/${currentProduct.id}/members`, {
+      const base = API_BASE || ''
+      const url = `${base}/api/products/${currentProduct.id}/members`
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        setMembers(data.data.members || [])
-      } else {
-        const errorData = await response.json()
-        setError(errorData.message || '获取团队成员失败')
+      const ct = response.headers.get('content-type') || ''
+      if (!response.ok || !ct.includes('application/json')) {
+        setMembers([])
+        if (!response.ok) setError('获取团队成员失败')
+        return
       }
+      const data = await response.json()
+      setMembers(data.data?.members || [])
     } catch (err) {
       setError('网络错误，请稍后重试')
     } finally {
@@ -48,26 +52,33 @@ const TeamMemberPage = ({ currentProduct }) => {
   const loadInvitations = async () => {
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch(`http://localhost:8000/api/products/${currentProduct.id}/invitations`, {
+      const base = API_BASE || ''
+      const url = `${base}/api/products/${currentProduct.id}/invitations`
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        setInvitations(data.data.invitations || [])
+      const ct = response.headers.get('content-type') || ''
+      if (!response.ok || !ct.includes('application/json')) {
+        setInvitations([])
+        return
       }
+      const data = await response.json()
+      setInvitations(data.data?.invitations || [])
     } catch (err) {
-      console.error('获取邀请列表失败:', err)
+      setInvitations([])
     }
   }
 
   const handleInviteMember = async (inviteData) => {
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch(`http://localhost:8000/api/products/${currentProduct.id}/members/invite`, {
+      const base = API_BASE || ''
+      const url = `${base}/api/products/${currentProduct.id}/members/invite`
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -96,7 +107,9 @@ const TeamMemberPage = ({ currentProduct }) => {
   const handleUpdateMemberRole = async (memberId, newRole) => {
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch(`http://localhost:8000/api/products/${currentProduct.id}/members/${memberId}/role`, {
+      const base = API_BASE || ''
+      const url = `${base}/api/products/${currentProduct.id}/members/${memberId}/role`
+      const response = await fetch(url, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -122,7 +135,9 @@ const TeamMemberPage = ({ currentProduct }) => {
 
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch(`http://localhost:8000/api/products/${currentProduct.id}/members/${memberId}`, {
+      const base = API_BASE || ''
+      const url = `${base}/api/products/${currentProduct.id}/members/${memberId}`
+      const response = await fetch(url, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,

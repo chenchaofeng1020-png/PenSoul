@@ -535,7 +535,8 @@ function App() {
   const [competitors, setCompetitors] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState(() => {
-    return localStorage.getItem('selectedCategory') || '产品路线图'
+    const v = localStorage.getItem('selectedCategory') || '产品路线图'
+    return (v || '').trim()
   })
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [selectedCompetitor, setSelectedCompetitor] = useState(() => {
@@ -545,8 +546,43 @@ function App() {
   const [showDetailPage, setShowDetailPage] = useState(() => {
     return localStorage.getItem('showDetailPage') === 'true'
   })
-  const [currentProductId, setCurrentProductId] = useState(null)
-  const [currentProduct, setCurrentProduct] = useState(null)
+  const [currentProductId, setCurrentProductId] = useState(() => {
+    const pid = localStorage.getItem('last_product_id')
+    return pid || null
+  })
+  const [currentProduct, setCurrentProduct] = useState(() => {
+    const pid = localStorage.getItem('last_product_id')
+    if (!pid) return null
+    // 优先从通用缓存读取
+    const tryGetFromKey = (key) => {
+      try {
+        const cached = localStorage.getItem(key)
+        if (!cached) return null
+        const arr = JSON.parse(cached)
+        if (Array.isArray(arr)) {
+          return arr.find(p => String(p.id) === String(pid)) || null
+        }
+        if (arr && Array.isArray(arr.data)) {
+          return arr.data.find(p => String(p.id) === String(pid)) || null
+        }
+      } catch { return null }
+      return null
+    }
+    let found = tryGetFromKey('products_cache')
+    if (!found) {
+      // 尝试所有用户缓存键
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i)
+          if (key && key.startsWith('products_cache_user_')) {
+            const maybe = tryGetFromKey(key)
+            if (maybe) { found = maybe; break }
+          }
+        }
+      } catch { void 0 }
+    }
+    return found || { id: pid }
+  })
   const [userProducts, setUserProducts] = useState([])
   const [isLoading, setIsLoading] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
@@ -562,7 +598,8 @@ function App() {
 
   // 当selectedCategory改变时，保存到localStorage
   useEffect(() => {
-    localStorage.setItem('selectedCategory', selectedCategory)
+    const v = (selectedCategory || '').trim()
+    localStorage.setItem('selectedCategory', v)
   }, [selectedCategory])
 
   const [isLoadingProducts, setIsLoadingProducts] = useState(false)
@@ -606,6 +643,7 @@ function App() {
   const handleProductChange = (product) => {
     setCurrentProduct(product)
     setCurrentProductId(product.id)
+    try { localStorage.setItem('last_product_id', String(product.id)) } catch { void 0 }
     loadCompetitors(product.id)
   }
 
@@ -654,6 +692,7 @@ function App() {
         const firstProduct = products[0]
         setCurrentProduct(firstProduct)
         setCurrentProductId(firstProduct.id)
+        try { localStorage.setItem('last_product_id', String(firstProduct.id)) } catch { void 0 }
         loadCompetitors(firstProduct.id)
       }
       console.timeEnd('loadUserProducts')
@@ -731,11 +770,12 @@ function App() {
     localStorage.removeItem('selectedCompetitor')
   }
 
+  const normalizedSelectedCategory = (selectedCategory || '').trim()
   const filteredCompetitors = competitors.filter(competitor => {
     const matchesSearch = (competitor.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (competitor.description || '').toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesCategory = selectedCategory === '全部' || selectedCategory === '竞品管理' || competitor.category === selectedCategory
-    console.log('Filtering competitor:', competitor.name, 'matchesSearch:', matchesSearch, 'matchesCategory:', matchesCategory, 'selectedCategory:', selectedCategory)
+    const matchesCategory = normalizedSelectedCategory === '全部' || normalizedSelectedCategory === '竞品管理' || competitor.category === normalizedSelectedCategory
+    console.log('Filtering competitor:', competitor.name, 'matchesSearch:', matchesSearch, 'matchesCategory:', matchesCategory, 'selectedCategory:', normalizedSelectedCategory)
     return matchesSearch && matchesCategory
   })
   
@@ -787,9 +827,9 @@ function App() {
         isLoadingProducts={isLoadingProducts}
       />
       
-      <main className={`${selectedCategory === '产品路线图' ? 'flex-1 bg-gray-50 p-4 overflow-y-auto' : 'flex-1 bg-gray-50 p-4 overflow-hidden'}`}>
-        <div className={`${selectedCategory === '产品路线图' ? 'bg-white rounded-xl shadow-sm min-h-full overflow-visible' : 'bg-white rounded-xl shadow-sm h-full overflow-hidden'}`}>
-        {selectedCategory === '竞品管理' ? (
+      <main className={`${normalizedSelectedCategory === '产品路线图' ? 'flex-1 bg-gray-50 p-4 overflow-y-auto' : 'flex-1 bg-gray-50 p-4 overflow-hidden'}`}>
+        <div className={`${normalizedSelectedCategory === '产品路线图' ? 'bg-white rounded-xl shadow-sm min-h-full overflow-visible' : 'bg-white rounded-xl shadow-sm h-full overflow-hidden'}`}>
+        {normalizedSelectedCategory === '竞品管理' ? (
           <CompetitorList 
             competitors={filteredCompetitors}
             currentProduct={currentProduct}
@@ -798,15 +838,15 @@ function App() {
             onViewDetail={handleViewCompetitorDetail}
             onAddCompetitor={() => setIsAddModalOpen(true)}
           />
-        ) : selectedCategory === '产品路线图' ? (
+        ) : normalizedSelectedCategory === '产品路线图' ? (
           <RoadmapPage currentProduct={currentProduct} />
-        ) : selectedCategory === '团队成员' ? (
+        ) : normalizedSelectedCategory === '团队成员' ? (
           <TeamMemberPage currentProduct={currentProduct} />
-        ) : selectedCategory === '内容规划' ? (
+        ) : normalizedSelectedCategory === '内容规划' ? (
           <ContentPlanningPage currentProduct={currentProduct} />
-        ) : selectedCategory === '平台Logo测试' ? (
+        ) : normalizedSelectedCategory === '平台Logo测试' ? (
           <PlatformLogoTest />
-        ) : selectedCategory === '产品资料管理' ? (
+        ) : (normalizedSelectedCategory === '产品资料管理' || normalizedSelectedCategory === '产品资料') ? (
           <ProductDataManager currentProduct={currentProduct} />
         ) : (
           <CompetitorList 

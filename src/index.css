@@ -25,6 +25,45 @@ body {
   display: none;
 }
 
+.rich-text-editor {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  overflow-x: hidden;
+}
+
+.rich-text-editor pre,
+.rich-text-editor code,
+.rich-text-editor blockquote {
+  white-space: pre-wrap !important;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.rich-text-editor img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* 强制所有子元素换行，覆盖粘贴内容中的内联 nowrap 样式 */
+.rich-text-editor *,
+.rich-text-editor :not(pre):not(code) {
+  word-break: break-word !important;
+  overflow-wrap: anywhere !important;
+  white-space: pre-wrap !important;
+}
+
+/* 表格内容换行避免溢出 */
+.rich-text-editor table {
+  width: 100%;
+  table-layout: fixed;
+}
+.rich-text-editor th,
+.rich-text-editor td {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
 /* 网格移动动画 - 增强版 */
 @keyframes grid-move {
   0% {

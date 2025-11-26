@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CalendarDays, Plus, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
-import { getContentItems, createContentItem, updateContentItem } from '../services/api'
+import { CalendarDays, Plus, ChevronLeft, ChevronRight, ChevronDown, Edit, FileText, Lightbulb, Info, Trash2 } from 'lucide-react'
+import { getContentItems, createContentItem, updateContentItem, deleteContentItem } from '../services/api'
 import { PLATFORMS, PLATFORM_MAP } from '../constants/platforms'
 import PlatformBadge from './PlatformBadge'
 import AddContentItemModalEnhanced from './AddContentItemModalEnhanced'
+import RichTextEditor from './RichTextEditor'
 
 const platforms = PLATFORMS
 
@@ -12,6 +13,7 @@ export default function ContentPlanningPage({ currentProduct }) {
   const [items, setItems] = useState([])
   const [platform, setPlatform] = useState('all')
   const [isAddOpen, setIsAddOpen] = useState(false)
+  const [preFillDate, setPreFillDate] = useState(null)
   const [currentMonth, setCurrentMonth] = useState(() => {
     const d = new Date()
     return new Date(d.getFullYear(), d.getMonth(), 1)
@@ -22,6 +24,107 @@ export default function ContentPlanningPage({ currentProduct }) {
   const [editItem, setEditItem] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
   const [hasLoaded, setHasLoaded] = useState(false)
+  const [isComposeOpen, setIsComposeOpen] = useState(false)
+  const [composeItem, setComposeItem] = useState(null)
+  const [composeTitle, setComposeTitle] = useState('')
+  const [composeBody, setComposeBody] = useState('')
+  const [composeIndustry, setComposeIndustry] = useState('')
+  const CONTENT_THEMES = {
+    'beauty': [
+      { id: 1, title: '产品试用分享', description: '真实体验产品效果，适合视觉化展示' },
+      { id: 2, title: '化妆教程步骤', description: '详细的化妆步骤教学，适合长图文' },
+      { id: 3, title: '成分科普解析', description: '专业成分分析，适合深度内容' }
+    ],
+    'saas': [
+      { id: 5, title: '产品功能更新', description: '新功能介绍和使用说明' },
+      { id: 6, title: '客户成功案例', description: '客户使用效果和反馈分享' },
+      { id: 7, title: '行业趋势解读', description: '行业分析和趋势预测' }
+    ],
+    'food': [
+      { id: 9, title: '菜品制作过程', description: '美食制作过程展示' },
+      { id: 10, title: '店铺环境展示', description: '餐厅环境和氛围展示' },
+      { id: 11, title: '顾客用餐反馈', description: '顾客真实用餐体验和评价' }
+    ]
+  }
+  const PLATFORM_TIPS = {
+    'wechat_mp': '深度文章，图文为主',
+    'xiaohongshu': '图文与短视频，偏种草风格',
+    'douyin': '短视频为主，节奏更快',
+    'weibo': '热点与短文，互动性强'
+  }
+
+  function openCompose(it){
+    setComposeItem(it)
+    setComposeTitle(it.title || '')
+    setComposeBody(it.body || '')
+    setIsComposeOpen(true)
+  }
+
+  function closeCompose(){
+    setIsComposeOpen(false)
+    setComposeItem(null)
+    setComposeTitle('')
+    setComposeBody('')
+    setComposeIndustry('')
+  }
+
+  async function handleDeleteContentItem(it){
+    if (!it?.id) return
+    const ok = window.confirm('确认删除该内容计划？')
+    if (!ok) return
+    try {
+      await deleteContentItem(it.id)
+      setItems(prev => {
+        const base = Array.isArray(prev) ? prev.slice() : []
+        const next = base.filter(x => x.id !== it.id)
+        next.sort((a,b)=> new Date(a.schedule_at) - new Date(b.schedule_at))
+        return next
+      })
+      try {
+        const { from, to } = getMonthRange(currentMonth)
+        const keyParts = [currentProduct.id, platform === 'all' ? 'all' : platform, from, to]
+        const cacheKey = `content_items_cache_${keyParts.join('_')}`
+        const cached = localStorage.getItem(cacheKey)
+        if (cached) {
+          const parsed = JSON.parse(cached)
+          const arr = Array.isArray(parsed?.data) ? parsed.data : Array.isArray(parsed) ? parsed : []
+          const merged = arr.filter(x => x.id !== it.id)
+          merged.sort((a,b)=> new Date(a.schedule_at) - new Date(b.schedule_at))
+          localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data: merged }))
+        }
+      } catch { void 0 }
+    } catch (e) {
+      alert('删除失败，请稍后重试')
+    }
+  }
+
+  useEffect(() => {
+    if (!isComposeOpen || !composeItem) return
+    const handler = setTimeout(async () => {
+      try {
+        const updates = { title: composeTitle, body: composeBody }
+        const updated = await updateContentItem(composeItem.id, updates)
+        setItems(prev => {
+          const base = Array.isArray(prev) ? prev.slice() : []
+          const filtered = base.filter(x => x.id !== composeItem.id)
+          const matchPlatform = platform === 'all' || updated.platform === platform
+          const next = matchPlatform ? [...filtered, updated] : filtered
+          next.sort((a,b)=> new Date(a.schedule_at) - new Date(b.schedule_at))
+          return next
+        })
+        try {
+          const { from, to } = getMonthRange(currentMonth)
+          const keyParts = [currentProduct.id, platform === 'all' ? 'all' : platform, from, to]
+          const cacheKey = `content_items_cache_${keyParts.join('_')}`
+          const cached = Array.isArray(items) ? items.slice() : []
+          const merged = [...cached.filter(x=>x.id!==composeItem.id), updated]
+          merged.sort((a,b)=> new Date(a.schedule_at) - new Date(b.schedule_at))
+          localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data: merged }))
+        } catch { void 0 }
+      } catch { void 0 }
+    }, 600)
+    return () => clearTimeout(handler)
+  }, [composeTitle, composeBody, composeItem?.id, isComposeOpen])
 
   useEffect(() => {
     const load = async () => {
@@ -67,19 +170,100 @@ export default function ContentPlanningPage({ currentProduct }) {
   return (
     <div className="bg-white rounded-xl shadow-sm h-full flex flex-col overflow-hidden">
       <div className="flex-shrink-0 border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center">
-          <div className="text-lg font-semibold text-gray-900">内容日历</div>
-        </div>
-        <div className="flex items-center">
-          <button onClick={()=>setIsAddOpen(true)} className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-            <Plus className="w-4 h-4" />
-            <span>新建计划</span>
-          </button>
-        </div>
+        {isComposeOpen ? (
+          <>
+            <div className="flex items-center">
+              <button onClick={closeCompose} className="text-sm font-semibold text-gray-500 hover:text-gray-700 underline-offset-2 hover:underline">内容规划</button>
+              <span className="mx-2 text-gray-400">/</span>
+              <div className="text-lg font-semibold text-gray-900">内容创作</div>
+            </div>
+            <div className="flex items-center">
+              <button onClick={closeCompose} className="flex items-center space-x-1 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200">
+                <span className="text-sm">返回</span>
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center">
+              <div className="text-lg font-semibold text-gray-900">内容日历</div>
+            </div>
+            <div className="flex items-center">
+              <button onClick={()=>setIsAddOpen(true)} className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                <Plus className="w-3 h-3" />
+                <span className="text-sm">新建计划</span>
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="flex-1 overflow-auto p-6">
-        {view === 'calendar' ? (
+        {isComposeOpen ? (
+          <div className="space-y-6">
+            <div className="grid grid-cols-3 gap-6">
+              <div className="col-span-2 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">标题</label>
+                  <input value={composeTitle} onChange={(e)=>setComposeTitle(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="输入内容标题" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">正文</label>
+                  <RichTextEditor initialContent={composeBody} onChange={setComposeBody} height="520px" />
+                </div>
+              </div>
+              <div className="md:sticky top-4">
+                <div className="rounded-xl p-4 bg-gray-50 divide-y divide-gray-200">
+                  {composeItem && (
+                    <div className="py-3">
+                      <div className="text-xs font-medium text-gray-500 mb-2">选题方向</div>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="text-sm font-semibold text-gray-900 leading-5">{getTopic(composeItem)}</div>
+                        <span className="text-xs px-2 py-1 rounded inline-flex items-center gap-1" style={{ backgroundColor: brandBg(composeItem.platform), color: brandText(composeItem.platform) }}>
+                          <PlatformBadge id={composeItem.platform} size={14} />
+                          <span>{PLATFORM_MAP[composeItem.platform]?.name || composeItem.platform}</span>
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="py-3">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Lightbulb className="w-4 h-4 text-amber-500" />
+                      <div className="text-sm font-medium text-gray-900">内容灵感</div>
+                    </div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <select value={composeIndustry} onChange={(e)=>setComposeIndustry(e.target.value)} className="text-sm border border-gray-300 rounded px-2 py-1 w-full bg-white">
+                        <option value="">选择行业</option>
+                        <option value="saas">SaaS</option>
+                        <option value="beauty">美妆</option>
+                        <option value="food">餐饮</option>
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(CONTENT_THEMES[composeIndustry] || []).map(theme => (
+                        <button key={theme.id} onClick={()=>{ setComposeTitle(theme.title); setComposeBody(theme.description) }} className="text-left px-3 py-2 bg-white rounded border border-gray-200 hover:bg-gray-100 text-sm">
+                          <div className="font-medium text-gray-900">{theme.title}</div>
+                          <div className="text-xs text-gray-600">{theme.description}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="py-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Info className="w-4 h-4 text-blue-600" />
+                      <div className="text-sm font-medium text-gray-900">平台适配提醒</div>
+                    </div>
+                    {composeItem && (
+                      <div className="text-sm text-gray-700">{PLATFORM_TIPS[composeItem.platform] || '根据平台进行内容形式适配'}</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : view === 'calendar' ? (
           <>
           <div className="flex items-center mb-3">
             <div className="flex items-center space-x-2">
@@ -137,7 +321,7 @@ export default function ContentPlanningPage({ currentProduct }) {
                     >
                       <div className={`flex items-center justify-between mb-1 ${inMonth?'text-gray-900':'text-gray-400'}`}>
                         <span className="text-xs">{d.getDate()}</span>
-                        <button onClick={(e)=>{e.stopPropagation(); setIsAddOpen(true)}} className="text-xs px-2 py-0.5 rounded bg-blue-50 text-blue-700 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity">+</button>
+                        <button onClick={(e)=>{e.stopPropagation(); setPreFillDate(key); setIsAddOpen(true)}} className="text-xs px-2 py-0.5 rounded bg-blue-50 text-blue-700 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity">+</button>
                       </div>
                       <div className="flex items-center gap-1 mb-1 min-h-[16px]">
                         {festival ? (
@@ -151,16 +335,21 @@ export default function ContentPlanningPage({ currentProduct }) {
                       <div className="text-xs text-gray-600 mb-1">{total>0?`${total}篇`:''}</div>
                       {total>0 && (
                         <div className="w-full h-1 rounded overflow-hidden flex">
-                          <div className="h-1 bg-green-500" style={{ flexBasis: 0, flexGrow: dist.published }} />
+                          <div className="h-1 bg-gray-400" style={{ flexBasis: 0, flexGrow: dist.not_started }} />
                           <div className="h-1 bg-yellow-400" style={{ flexBasis: 0, flexGrow: dist.writing }} />
-                          <div className="h-1 bg-purple-500" style={{ flexBasis: 0, flexGrow: dist.review }} />
+                          <div className="h-1 bg-purple-500" style={{ flexBasis: 0, flexGrow: dist.pending_publish }} />
+                          <div className="h-1 bg-green-500" style={{ flexBasis: 0, flexGrow: dist.published }} />
                         </div>
                       )}
                     {hoverPreview.key === key && dayItems.length > 0 && (
                       <div className="absolute z-10 left-2 right-2 top-10 bg-white border border-gray-200 rounded-lg shadow p-2">
-                        {dayItems.map(it => (
+                        {dayItems.slice().sort((a,b)=>{
+                          const ua = pickUpdatedAt(a) || a.created_at
+                          const ub = pickUpdatedAt(b) || b.created_at
+                          return new Date(ub) - new Date(ua)
+                        }).map(it => (
                           <div key={it.id} className="text-xs text-gray-700 truncate">
-                            {it.title}
+                            {getTopic(it)}
                           </div>
                         ))}
                       </div>
@@ -170,9 +359,10 @@ export default function ContentPlanningPage({ currentProduct }) {
               })}
               </div>
               <div className="flex items-center space-x-4 text-xs text-gray-600">
-              <div className="flex items-center space-x-1"><span className="w-3 h-3 bg-green-500 rounded-sm"></span><span>已发布</span></div>
-              <div className="flex items-center space-x-1"><span className="w-3 h-3 bg-yellow-400 rounded-sm"></span><span>撰写中</span></div>
-              <div className="flex items-center space-x-1"><span className="w-3 h-3 bg-purple-500 rounded-sm"></span><span>待审核</span></div>
+                <div className="flex items-center space-x-1"><span className="w-3 h-3 bg-gray-400 rounded-sm"></span><span>未开始</span></div>
+                <div className="flex items-center space-x-1"><span className="w-3 h-3 bg-yellow-400 rounded-sm"></span><span>撰写中</span></div>
+                <div className="flex items-center space-x-1"><span className="w-3 h-3 bg-purple-500 rounded-sm"></span><span>待发布</span></div>
+                <div className="flex items-center space-x-1"><span className="w-3 h-3 bg-green-500 rounded-sm"></span><span>已发布</span></div>
               </div>
             </div>
             <div className="col-span-1">
@@ -188,30 +378,75 @@ export default function ContentPlanningPage({ currentProduct }) {
                       <div className="text-center text-gray-500 py-8">加载中...</div>
                     ) : (
                       <>
-                    {Object.entries(Object.fromEntries(groupedByDate)).filter(([date]) => isSameMonth(new Date(date), currentMonth)).sort((a,b)=> new Date(a[0]) - new Date(b[0])).map(([date, dayItems]) => (
+                    {Object.entries(Object.fromEntries(groupedByDate))
+                          .filter(([date]) => isSameMonth(new Date(date), currentMonth))
+                          .sort((a,b)=>{
+                            const maxA = Math.max(...(a[1]||[]).map(x=> new Date(pickUpdatedAt(x) || x.created_at).getTime()))
+                            const maxB = Math.max(...(b[1]||[]).map(x=> new Date(pickUpdatedAt(x) || x.created_at).getTime()))
+                            return maxB - maxA
+                          })
+                          .map(([date, dayItems]) => (
                           <div key={date} className="pl-10">
-                            <div className="flex items-center mb-2">
+                            <div className="flex items中心 mb-2">
                               <div className="w-3 h-3 rounded-full bg-gray-300 border border-gray-300 relative -ml-[30px] mr-3"></div>
                               <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">{date}</div>
                             </div>
                             <div className="space-y-3">
-                              {dayItems.map(it => {
+                              {dayItems.slice().sort((a,b)=>{
+                                const ua = pickUpdatedAt(a) || a.created_at
+                                const ub = pickUpdatedAt(b) || b.created_at
+                                return new Date(ub) - new Date(ua)
+                              }).map(it => {
                                 const st = inferStatus(it)
-                                const statusColor = st==='published'?'bg-green-100 text-green-700':st==='writing'?'bg-yellow-100 text-yellow-700':'bg-purple-100 text-purple-700'
+                                const statusColor = 
+                                  st==='published' ? 'bg-green-100 text-green-700' :
+                                  st==='pending_publish' ? 'bg-purple-100 text-purple-700' :
+                                  st==='writing' ? 'bg-yellow-100 text-yellow-700' :
+                                  'bg-gray-100 text-gray-700'
                                 return (
-                                  <div key={it.id} className="border border-gray-100 rounded-lg p-3 bg-white cursor-pointer" onClick={()=>{ setEditItem(it); setIsEditOpen(true) }}>
-                                    <div className="flex items-start justify-between gap-2 mb-1">
-                                      <div className="font-medium text-gray-900 text-[14px] whitespace-normal break-words flex-1">{it.title}</div>
-                                      <span className={`text-[12px] px-2 py-1 rounded ${statusColor}`}>{statusLabel(st)}</span>
+                                  <div key={it.id} className="border border-gray-100 rounded-lg bg-white divide-y divide-gray-100">
+                <div className="p-3">
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <div className="font-medium text-gray-900 text-[14px] whitespace-normal break-words flex-1">{getTopic(it)}</div>
+                    <div className="flex items-center gap-1">
+                      <button onClick={()=>handleDeleteContentItem(it)} className="p-1 rounded hover:bg-gray-100 text-red-600 hover:text-red-700">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                      <button onClick={()=>{ setEditItem(it); setIsEditOpen(true) }} className="p-1 rounded hover:bg-gray-100">
+                        <Edit className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="text-[12px] text-gray-500 mb-2">{formatDateTime(it.schedule_at)}</div>
+                                      <div className="flex items-center flex-wrap gap-2">
+                                        <span className="text-[12px] px-2 py-1 rounded inline-flex items-center gap-1" style={{ backgroundColor: brandBg(it.platform), color: brandText(it.platform) }}>
+                                          <PlatformBadge id={it.platform} size={14} />
+                                          <span>{PLATFORM_MAP[it.platform]?.name || it.platform}</span>
+                                        </span>
+                                        <span className={`text-[12px] px-2 py-1 rounded ${statusColor}`}>{statusLabel(st)}</span>
+                                      </div>
                                     </div>
-                                    <div className="text-[12px] text-gray-500 mb-1">{formatDateTime(it.created_at)}</div>
-                                    <div className="flex items-center flex-wrap gap-2">
-                                      <span className="text-[12px] px-2 py-1 rounded inline-flex items-center gap-1" style={{ backgroundColor: brandBg(it.platform), color: brandText(it.platform) }}>
-                                        <PlatformBadge id={it.platform} size={14} />
-                                        <span>{PLATFORM_MAP[it.platform]?.name || it.platform}</span>
-                                      </span>
-                                      {typeof it.views === 'number' && <span className="text-xs text-gray-500 ml-auto">{it.views} 阅读</span>}
-                                    </div>
+                <div className="p-3">
+                  {it.title && (
+                    <div className="text-[13px] font-medium text-gray-900 mb-1 whitespace-normal break-words">{it.title}</div>
+                  )}
+                  <div className="flex items-center text-[12px] text-gray-500 mb-1 gap-2">
+                    <span>最近更新：{formatDateTime(pickUpdatedAt(it) || it.created_at)}</span>
+                  </div>
+                  <div className="mt-2">
+                    <div className="relative group rounded-lg p-2 bg-gray-50">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="text-[12px] text-gray-600 line-clamp-2 flex-1">
+                          {getBodyExcerpt(it) || '暂无内容预览'}
+                        </div>
+                        <button onClick={()=>openCompose(it)} className="text-xs text-blue-600 hover:underline px-0 py-0 bg-transparent flex-shrink-0">内容创作</button>
+                      </div>
+                      <div className="absolute left-0 right-0 mt-1 z-10 bg-white border border-gray-200 rounded shadow p-2 text-[12px] text-gray-700 hidden group-hover:block max-h-48 overflow-y-auto">
+                        {stripHtml(it.body || '')}
+                      </div>
+                    </div>
+                  </div>
+                </div>
                                   </div>
                                 )
                               })}
@@ -237,28 +472,73 @@ export default function ContentPlanningPage({ currentProduct }) {
                   <div className="text-center text-gray-500 py-8">加载中...</div>
                 ) : (
                   <>
-                    {Object.entries(Object.fromEntries(groupedByDate)).sort((a,b)=> new Date(a[0]) - new Date(b[0])).map(([date, dayItems]) => (
+                    {Object.entries(Object.fromEntries(groupedByDate))
+                      .sort((a,b)=>{
+                        const maxA = Math.max(...(a[1]||[]).map(x=> new Date(pickUpdatedAt(x) || x.created_at).getTime()))
+                        const maxB = Math.max(...(b[1]||[]).map(x=> new Date(pickUpdatedAt(x) || x.created_at).getTime()))
+                        return maxB - maxA
+                      })
+                      .map(([date, dayItems]) => (
                       <div key={date} className="pl-10">
                         <div className="flex items-center mb-2">
-                          <div className="w-3 h-3 rounded-full bg-gray-300 border border-gray-300 relative -ml-[30px] mr-3"></div>
+                          <div className="w-3 h-3 rounded满 bg-gray-300 border border-gray-300 relative -ml-[30px] mr-3"></div>
                           <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">{date}</div>
                         </div>
                         <div className="space-y-3">
-                          {dayItems.map(it => {
+                          {dayItems.slice().sort((a,b)=>{
+                            const ua = pickUpdatedAt(a) || a.created_at
+                            const ub = pickUpdatedAt(b) || b.created_at
+                            return new Date(ub) - new Date(ua)
+                          }).map(it => {
                             const st = inferStatus(it)
-                            const statusColor = st==='published'?'bg-green-100 text-green-700':st==='writing'?'bg-yellow-100 text-yellow-700':'bg-purple-100 text-purple-700'
+                            const statusColor = 
+                              st==='published' ? 'bg-green-100 text-green-700' :
+                              st==='pending_publish' ? 'bg-purple-100 text-purple-700' :
+                              st==='writing' ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-gray-100 text-gray-700'
                             return (
-                              <div key={it.id} className="border border-gray-100 rounded-lg p-3 bg-white cursor-pointer" onClick={()=>{ setEditItem(it); setIsEditOpen(true) }}>
-                                <div className="flex items-start justify-between gap-2 mb-1">
-                                  <div className="font-medium text-gray-900 text-[14px] whitespace-normal break-words flex-1">{it.title}</div>
-                                  <span className={`text-[12px] px-2 py-1 rounded ${statusColor}`}>{statusLabel(st)}</span>
+                              <div key={it.id} className="border border-gray-100 rounded-lg bg-white divide-y divide-gray-100">
+                                <div className="p-3">
+                                  <div className="flex items-start justify-between gap-2 mb-1">
+                                    <div className="font-medium text-gray-900 text-[14px] whitespace-normal break-words flex-1">{getTopic(it)}</div>
+                                    <div className="flex items-center gap-1">
+                                      <button onClick={()=>handleDeleteContentItem(it)} className="p-1 rounded hover:bg-gray-100 text-red-600 hover:text-red-700">
+                                        <Trash2 className="w-3 h-3" />
+                                      </button>
+                                      <button onClick={()=>{ setEditItem(it); setIsEditOpen(true) }} className="p-1 rounded hover:bg-gray-100">
+                                        <Edit className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <div className="text-[12px] text-gray-500 mb-2">{formatDateTime(it.schedule_at)}</div>
+                                  <div className="flex items-center flex-wrap gap-2">
+                                    <span className="text-[12px] px-2 py-1 rounded inline-flex items-center gap-1" style={{ backgroundColor: brandBg(it.platform), color: brandText(it.platform) }}>
+                                      <PlatformBadge id={it.platform} size={14} />
+                                      <span>{PLATFORM_MAP[it.platform]?.name || it.platform}</span>
+                                    </span>
+                                    <span className={`text-[12px] px-2 py-1 rounded ${statusColor}`}>{statusLabel(st)}</span>
+                                  </div>
                                 </div>
-                                <div className="text-[12px] text-gray-500 mb-1">{formatDateTime(it.created_at)}</div>
-                                <div className="flex items-center flex-wrap gap-2">
-                                  <span className="text-[12px] px-2 py-1 rounded inline-flex items-center gap-1" style={{ backgroundColor: brandBg(it.platform), color: brandText(it.platform) }}>
-                                    <PlatformBadge id={it.platform} size={14} />
-                                    <span>{PLATFORM_MAP[it.platform]?.name || it.platform}</span>
-                                  </span>
+                                <div className="p-3">
+                                  {it.title && (
+                                    <div className="text-[13px] font-medium text-gray-900 mb-1 whitespace-normal break-words">{it.title}</div>
+                                  )}
+                                  <div className="flex items-center text-[12px] text-gray-500 mb-1 gap-2">
+                                    <span>最近更新：{formatDateTime(pickUpdatedAt(it) || it.created_at)}</span>
+                                  </div>
+                                  <div className="mt-2">
+                                    <div className="relative group rounded-lg p-2 bg-gray-50">
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div className="text-[12px] text-gray-600 line-clamp-2 flex-1">
+                                          {getBodyExcerpt(it) || '暂无内容预览'}
+                                        </div>
+                                        <button onClick={()=>openCompose(it)} className="text-xs text-blue-600 hover:underline px-0 py-0 bg-transparent flex-shrink-0">内容创作</button>
+                                      </div>
+                                      <div className="absolute left-0 right-0 mt-1 z-10 bg-white border border-gray-200 rounded shadow p-2 text-[12px] text-gray-700 hidden group-hover:block max-h-48 overflow-y-auto">
+                                        {stripHtml(it.body || '')}
+                                      </div>
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
                             )
@@ -279,12 +559,16 @@ export default function ContentPlanningPage({ currentProduct }) {
         <AddContentItemModalEnhanced 
           onClose={()=>setIsAddOpen(false)}
           onSubmit={async (form)=>{
-            const created = await createContentItem({ ...form, product_id: currentProduct.id })
+            const created = await createContentItem({ product_id: currentProduct.id, platform: form.platform, schedule_at: form.schedule_at, status: form.status, topic_title: form.topic_title })
+            const createdWithTopic = {
+              ...created,
+              topic_title: typeof created?.topic_title !== 'undefined' ? created.topic_title : (form.topic_title || '')
+            }
             setItems(prev => {
               const matchPlatform = platform === 'all' || created.platform === platform
               const base = Array.isArray(prev) ? prev.slice() : []
               if (!matchPlatform) return base
-              const next = [...base, created]
+              const next = [...base, createdWithTopic]
               next.sort((a,b)=> new Date(a.schedule_at) - new Date(b.schedule_at))
               return next
             })
@@ -293,12 +577,14 @@ export default function ContentPlanningPage({ currentProduct }) {
               const keyParts = [currentProduct.id, platform === 'all' ? 'all' : platform, from, to]
               const cacheKey = `content_items_cache_${keyParts.join('_')}`
               const cached = Array.isArray(items) ? items.slice() : []
-              const merged = [...cached, created].sort((a,b)=> new Date(a.schedule_at) - new Date(b.schedule_at))
+              const merged = [...cached, createdWithTopic].sort((a,b)=> new Date(a.schedule_at) - new Date(b.schedule_at))
               localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data: merged }))
             } catch { void 0 }
             setIsAddOpen(false)
+            setPreFillDate(null)
           }}
           currentProduct={currentProduct}
+          defaultScheduleAt={preFillDate || ''}
         />
       )}
 
@@ -308,17 +594,20 @@ export default function ContentPlanningPage({ currentProduct }) {
           onSubmit={async (form)=>{
             const updates = {
               platform: form.platform,
-              title: form.title,
-              body: form.body,
               schedule_at: form.schedule_at,
               status: form.status,
+              topic_title: form.topic_title,
             }
             const updated = await updateContentItem(editItem.id, updates)
             setItems(prev => {
               const base = Array.isArray(prev) ? prev.slice() : []
               const filtered = base.filter(x => x.id !== editItem.id)
               const matchPlatform = platform === 'all' || updated.platform === platform
-              const next = matchPlatform ? [...filtered, updated] : filtered
+              const nextItem = { 
+                ...updated, 
+                topic_title: typeof updates.topic_title !== 'undefined' ? updates.topic_title : updated.topic_title 
+              }
+              const next = matchPlatform ? [...filtered, nextItem] : filtered
               next.sort((a,b)=> new Date(a.schedule_at) - new Date(b.schedule_at))
               return next
             })
@@ -327,7 +616,11 @@ export default function ContentPlanningPage({ currentProduct }) {
               const keyParts = [currentProduct.id, platform === 'all' ? 'all' : platform, from, to]
               const cacheKey = `content_items_cache_${keyParts.join('_')}`
               const cached = Array.isArray(items) ? items.slice() : []
-              const merged = [...cached.filter(x=>x.id!==editItem.id), updated]
+              const mergedItem = { 
+                ...updated, 
+                topic_title: typeof updates.topic_title !== 'undefined' ? updates.topic_title : updated.topic_title 
+              }
+              const merged = [...cached.filter(x=>x.id!==editItem.id), mergedItem]
               merged.sort((a,b)=> new Date(a.schedule_at) - new Date(b.schedule_at))
               localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data: merged }))
             } catch { void 0 }
@@ -347,7 +640,7 @@ export default function ContentPlanningPage({ currentProduct }) {
             <div className="space-y-2">
               {selectedDate.items.map(it => (
                 <div key={it.id} className="border border-gray-200 rounded-lg p-3">
-                  <div className="font-medium text-gray-900">{it.title}</div>
+                  <div className="font-medium text-gray-900">{getTopic(it)}</div>
                   <div className="flex items-center gap-2 mt-1">
                     <PlatformBadge id={it.platform} size={16} />
                     <span className="text-xs text-gray-600">{PLATFORM_MAP[it.platform]?.name || it.platform}</span>
@@ -417,6 +710,32 @@ function formatDateTime(ts){
   return `${y}-${m}-${day} ${hh}:${mm}`
 }
 
+function getTopic(it){
+  return it?.topic_title || it?.topic || it?.plan_title || it?.title || ''
+}
+
+function pickUpdatedAt(it){
+  const keys = ['updated_at','updatedAt','modified_at','modifiedAt','last_update_ts','lastUpdateTs','last_updated_at','lastUpdatedAt','updated','modified']
+  for (const k of keys){
+    if (it && it[k]) return it[k]
+  }
+  return null
+}
+
+
+function stripHtml(html){
+  if (!html) return ''
+  const tmp = html.replace(/<[^>]+>/g,' ').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>')
+  return tmp.trim().replace(/\s+/g,' ')
+}
+
+function getBodyExcerpt(it){
+  const t = stripHtml(it.body || '')
+  if (!t) return ''
+  const s = t.slice(0, 80)
+  return t.length>80 ? s + '…' : s
+}
+
 function groupByDate(items){
   const map = new Map()
   items.forEach(it => {
@@ -430,34 +749,32 @@ function groupByDate(items){
 
 function inferStatus(it){
   const s = it.status
-  if (s === 'published' || s === 'writing' || s === 'review') return s
+  if (s === 'not_started' || s === 'writing' || s === 'pending_publish' || s === 'published') return s
   if (s === 'draft') return 'writing'
   const now = Date.now()
   const t = new Date(it.schedule_at).getTime()
   if (t < now) return 'published'
-  return 'writing'
+  return 'not_started'
 }
 
 function statusDistribution(items){
-  const dist = { published: 0, writing: 0, review: 0 }
+  const dist = { not_started: 0, writing: 0, pending_publish: 0, published: 0 }
   items.forEach(it => {
     const st = inferStatus(it)
     if (st === 'published') dist.published++
-    else if (st === 'review') dist.review++
-    else dist.writing++
+    else if (st === 'pending_publish') dist.pending_publish++
+    else if (st === 'writing') dist.writing++
+    else dist.not_started++
   })
-  const sum = dist.published + dist.writing + dist.review
-  if (items.length > 0 && sum === 0) {
-    dist.writing = items.length
-  }
   return dist
 }
 
 function statusLabel(st){
   if (st==='published') return '已发布'
-  if (st==='review') return '待审核'
+  if (st==='pending_publish') return '待发布'
   if (st==='writing') return '撰写中'
-  return '撰写中'
+  if (st==='not_started') return '未开始'
+  return '未开始'
 }
 
 function isSameMonth(a,b){
@@ -508,7 +825,7 @@ function getSolarTerm(d){
     { name: '大雪', m: 12, d: 7 },
     { name: '冬至', m: 12, d: 22 }
   ]
-  const found = terms.find(t => t.m===m && Math.abs(t.d - day) <= 1)
+  const found = terms.find(t => t.m===m && t.d === day)
   return found?.name || ''
 }
 

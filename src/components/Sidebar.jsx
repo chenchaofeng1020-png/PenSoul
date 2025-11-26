@@ -70,10 +70,9 @@ const Sidebar = ({
   const menuItems = [
     { icon: GitBranch, label: '产品路线图' },
     { icon: Layers, label: '竞品管理' },
-    { icon: Users, label: '团队成员' },
     { icon: Calendar, label: '内容规划' },
     { icon: Database, label: '产品资料管理' },
-    { icon: Target, label: '平台Logo测试' },
+    { icon: Users, label: '团队成员' },
   ]
 
   return (
@@ -193,7 +192,7 @@ const Sidebar = ({
                   href="#"
                   onClick={(e) => {
                     e.preventDefault()
-                    setSelectedCategory(item.label)
+                    setSelectedCategory((item.label || '').trim())
                   }}
                   className={`flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200 ${
                     isSelected 

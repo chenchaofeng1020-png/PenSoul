@@ -24,7 +24,7 @@ export default function ProductDataManager({ currentProduct }) {
   const [product, setProduct] = useState(null)
   const [sellingPoints, setSellingPoints] = useState([])
   const [features, setFeatures] = useState([])
-  const [activeTab, setActiveTab] = useState('overview')
+  const [activeTab, setActiveTab] = useState('wizard')
   const [basicErrors, setBasicErrors] = useState({})
   const [docs, setDocs] = useState([])
   const [faqs, setFaqs] = useState([])
@@ -93,6 +93,37 @@ export default function ProductDataManager({ currentProduct }) {
     sellingPoints: true,
     features: true
   })
+
+  const [wizard, setWizard] = useState({
+    elevator: '',
+    personas: [],
+    name: '',
+    category: '',
+    tagline: '',
+    positioning: '',
+    website_url: '',
+    industry: '',
+    value_proposition: '',
+    overview_short: ''
+  })
+  const [featureCards, setFeatureCards] = useState([])
+  const [newFeatureCard, setNewFeatureCard] = useState({ name: '', capability_domain: '', benefit_statement: '' })
+  const [storiesData, setStoriesData] = useState([])
+  const [newStory, setNewStory] = useState({ who: '', when: '', problem: '', current_workaround: '', our_solution: '', expected_outcome: '' })
+  const [messagingRows, setMessagingRows] = useState([])
+  const [newMessage, setNewMessage] = useState({ persona: '', channel: '', pain: '', anchor_message: '', benefit: '', evidence: '' })
+
+  const capabilityDomains = ['创建', '协作', '分析', '自动化', '集成', '治理']
+
+  const previewData = (() => {
+    const hero = wizard.elevator || wizard.tagline || formData.tagline || ''
+    const firstStory = storiesData[0] || {}
+    const pains = firstStory.problem ? [firstStory.problem] : []
+    const solution = firstStory.our_solution || ''
+    const benefits = featureCards.map(fc => fc.benefit_statement).filter(Boolean).slice(0, 4)
+    const title = wizard.name || formData.name || currentProduct?.name || ''
+    return { hero, pains, solution, benefits, title }
+  })()
 
   // 产品状态选项
   const statusOptions = [
@@ -376,7 +407,6 @@ export default function ProductDataManager({ currentProduct }) {
       <div className="border-b border-gray-200 px-6 py-4 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <Settings className="w-5 h-5 text-blue-600" />
             <h2 className="text-lg font-semibold text-gray-900">产品资料管理</h2>
           </div>
           <div className="text-sm text-gray-500">
@@ -389,10 +419,13 @@ export default function ProductDataManager({ currentProduct }) {
         <div className="max-w-5xl mx-auto">
           <div className="flex items-center space-x-2 mb-4 overflow-x-auto">
             {[
-              { key: 'overview', label: '概览' },
+              { key: 'wizard', label: '向导' },
+              { key: 'featureCards', label: `功能卡片(${featureCards.length})` },
+              { key: 'messaging', label: `消息矩阵(${messagingRows.length})` },
+              { key: 'stories', label: `场景故事(${storiesData.length})` },
+              { key: 'docs', label: '资料库' },
               { key: 'sellingPoints', label: `卖点(${sellingPoints.length})` },
               { key: 'features', label: `特性(${features.length})` },
-              { key: 'docs', label: '文档' },
               { key: 'faqs', label: 'FAQ' },
             ].map((t) => (
               <button
@@ -409,11 +442,399 @@ export default function ProductDataManager({ currentProduct }) {
             ))}
           </div>
 
+          {activeTab === 'wizard' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="space-y-6">
+                <div>
+                  <div className="text-xs text-gray-500 mb-2">基础信息</div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">产品名称</label>
+                      <input type="text" value={wizard.name} onChange={(e)=>{const v=e.target.value; setWizard({...wizard, name:v}); setFormData({...formData, name:v})}} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Tagline</label>
+                      <input type="text" value={wizard.tagline} onChange={(e)=>{const v=e.target.value; setWizard({...wizard, tagline:v}); setFormData({...formData, tagline:v})}} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mt-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">产品分类</label>
+                      <input type="text" value={wizard.category} onChange={(e)=>{const v=e.target.value; setWizard({...wizard, category:v}); setFormData({...formData, category:v})}} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">产品定位</label>
+                      <input type="text" value={wizard.positioning} onChange={(e)=>{const v=e.target.value; setWizard({...wizard, positioning:v}); setFormData({...formData, positioning:v})}} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mt-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">所属行业</label>
+                      <input type="text" value={wizard.industry} onChange={(e)=>{const v=e.target.value; setWizard({...wizard, industry:v}); setFormData({...formData, industry:v})}} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">官网链接</label>
+                      <input type="url" value={wizard.website_url} onChange={(e)=>{const v=e.target.value; setWizard({...wizard, website_url:v}); setFormData({...formData, website_url:v})}} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-xs text-gray-500 mb-2">价值与摘要</div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">电梯陈述</label>
+                    <input type="text" value={wizard.elevator} onChange={(e)=>setWizard({...wizard, elevator:e.target.value})} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="一句话描述产品价值" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mt-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">概览摘要</label>
+                      <textarea value={wizard.overview_short} onChange={(e)=>{const v=e.target.value; setWizard({...wizard, overview_short:v}); setFormData({...formData, overview_short:v})}} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" rows={3} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">价值主张</label>
+                      <input type="text" value={wizard.value_proposition} onChange={(e)=>{const v=e.target.value; setWizard({...wizard, value_proposition:v}); setFormData({...formData, value_proposition:v})}} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-xs text-gray-500 mb-2">目标与角色</div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">目标用户</label>
+                      <textarea value={formData.target_audience} onChange={(e)=>setFormData({...formData, target_audience:e.target.value})} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm h-20" placeholder="描述目标用户群体" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Persona</label>
+                      <div className="flex items-center space-x-2">
+                        <input type="text" className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="如：运营经理" onKeyDown={(e)=>{if(e.key==='Enter'){const v=e.currentTarget.value.trim(); if(v) setWizard((prev)=>({...prev, personas:[...prev.personas, v]})); e.currentTarget.value=''}}} />
+                      </div>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {wizard.personas.map((p, idx)=>(<span key={idx} className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-700 border border-gray-200">{p}</span>))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                </div>
+
+                <div>
+                  <div className="text-xs text-gray-500 mb-2">链接与资源</div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Logo链接</label>
+                      <input type="url" value={formData.logo_url} onChange={(e)=>setFormData({...formData, logo_url:e.target.value})} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="https://example.com/logo.png" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">文档链接</label>
+                      <input type="url" value={formData.docs_url} onChange={(e)=>setFormData({...formData, docs_url:e.target.value})} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="https://docs.example.com" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mt-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">演示链接</label>
+                      <input type="url" value={formData.demo_url} onChange={(e)=>setFormData({...formData, demo_url:e.target.value})} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="https://demo.example.com" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">下载链接</label>
+                      <input type="url" value={formData.download_url} onChange={(e)=>setFormData({...formData, download_url:e.target.value})} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="https://download.example.com" />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-xs text-gray-500 mb-2">版本与状态</div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">版本号</label>
+                      <input type="text" value={formData.version} onChange={(e)=>setFormData({...formData, version:e.target.value})} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="如：1.2.0" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">发布日期</label>
+                      <input type="date" value={formData.release_date} onChange={(e)=>setFormData({...formData, release_date:e.target.value})} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">阶段</label>
+                      <select value={formData.lifecycle_stage} onChange={(e)=>setFormData({...formData, lifecycle_stage:e.target.value})} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="alpha">Alpha</option>
+                        <option value="beta">Beta</option>
+                        <option value="ga">GA</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">产品状态</label>
+                    <select value={formData.status} onChange={(e)=>setFormData({...formData, status:e.target.value})} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                      {statusOptions.map(option=>(<option key={option.value} value={option.value}>{option.label}</option>))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                </div>
+
+                <div className="flex justify-end">
+                  <button onClick={handleSaveBasicInfo} disabled={Object.keys(basicErrors).length > 0} className={`px-3 py-2 text-sm text-white rounded ${Object.keys(basicErrors).length > 0 ? 'bg-blue-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}>保存基础信息</button>
+                </div>
+              </div>
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="text-sm text-gray-500 mb-2">预览</div>
+                <div className="space-y-3">
+                  <div className="text-lg font-semibold text-gray-900">{previewData.title || '待填写产品名称'}</div>
+                  <div className="text-sm text-gray-700">{previewData.hero || '待填写电梯陈述'}</div>
+                  <div className="text-sm text-gray-700">{previewData.pains[0] || '添加场景故事以展示痛点'}</div>
+                  <div className="text-sm text-gray-700">{previewData.solution || '添加场景故事以展示解决方案'}</div>
+                  <div className="text-sm text-gray-700">
+                    {(previewData.benefits && previewData.benefits.length > 0) ? previewData.benefits.join('；') : '添加功能卡片的收益陈述'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'featureCards' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">名称</label>
+                    <input
+                      type="text"
+                      value={newFeatureCard.name}
+                      onChange={(e) => setNewFeatureCard({ ...newFeatureCard, name: e.target.value })}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">能力域</label>
+                    <select
+                      value={newFeatureCard.capability_domain}
+                      onChange={(e) => setNewFeatureCard({ ...newFeatureCard, capability_domain: e.target.value })}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                    >
+                      <option value="">选择</option>
+                      {capabilityDomains.map((d) => (<option key={d} value={d}>{d}</option>))}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">收益陈述</label>
+                  <input
+                    type="text"
+                    value={newFeatureCard.benefit_statement}
+                    onChange={(e) => setNewFeatureCard({ ...newFeatureCard, benefit_statement: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                    placeholder="面向用户的结果"
+                  />
+                </div>
+                <div className="flex items-center justify-end">
+                  <button
+                    className="inline-flex items-center space-x-2 bg-blue-600 text-white px-3 py-2 rounded-md text-sm"
+                    onClick={() => {
+                      const { name, capability_domain, benefit_statement } = newFeatureCard
+                      if (!name.trim() || !capability_domain.trim() || !benefit_statement.trim()) return
+                      setFeatureCards((prev) => [...prev, { ...newFeatureCard }])
+                      setNewFeatureCard({ name: '', capability_domain: '', benefit_statement: '' })
+                    }}
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>添加功能卡片</span>
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {featureCards.map((fc, idx) => (
+                    <div key={idx} className="p-3 border border-gray-200 rounded-lg flex items-center justify-between">
+                      <div className="text-sm">
+                        <div className="font-medium text-gray-900">{fc.name}</div>
+                        <div className="text-gray-600">{fc.capability_domain} · {fc.benefit_statement}</div>
+                      </div>
+                      <button
+                        className="text-gray-500 hover:text-red-600 text-sm"
+                        onClick={() => setFeatureCards(featureCards.filter((_, i) => i !== idx))}
+                      >
+                        删除
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="text-sm text-gray-500 mb-2">预览</div>
+                <div className="space-y-3">
+                  <div className="text-lg font-semibold text-gray-900">{previewData.hero || '待填写电梯陈述'}</div>
+                  <div className="text-sm text-gray-700">{previewData.pains[0] || '添加场景故事以展示痛点'}</div>
+                  <div className="text-sm text-gray-700">{previewData.solution || '添加场景故事以展示解决方案'}</div>
+                  <div className="text-sm text-gray-700">
+                    {(previewData.benefits && previewData.benefits.length > 0) ? previewData.benefits.join('；') : '添加功能卡片的收益陈述'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'messaging' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <input
+                    type="text"
+                    value={newMessage.persona}
+                    onChange={(e) => setNewMessage({ ...newMessage, persona: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                    placeholder="Persona"
+                  />
+                  <input
+                    type="text"
+                    value={newMessage.channel}
+                    onChange={(e) => setNewMessage({ ...newMessage, channel: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                    placeholder="渠道"
+                  />
+                </div>
+                <input
+                  type="text"
+                  value={newMessage.pain}
+                  onChange={(e) => setNewMessage({ ...newMessage, pain: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  placeholder="痛点"
+                />
+                <input
+                  type="text"
+                  value={newMessage.anchor_message}
+                  onChange={(e) => setNewMessage({ ...newMessage, anchor_message: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  placeholder="锚点话术"
+                />
+                <input
+                  type="text"
+                  value={newMessage.benefit}
+                  onChange={(e) => setNewMessage({ ...newMessage, benefit: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  placeholder="关键利益"
+                />
+                <input
+                  type="text"
+                  value={newMessage.evidence}
+                  onChange={(e) => setNewMessage({ ...newMessage, evidence: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  placeholder="证据链接"
+                />
+                <div className="flex items-center justify-end">
+                  <button
+                    className="inline-flex items-center space-x-2 bg-blue-600 text-white px-3 py-2 rounded-md text-sm"
+                    onClick={() => {
+                      const { persona, channel, pain, anchor_message, benefit } = newMessage
+                      if (!persona.trim() || !channel.trim() || !pain.trim() || !anchor_message.trim() || !benefit.trim()) return
+                      setMessagingRows((prev) => [...prev, { ...newMessage }])
+                      setNewMessage({ persona: '', channel: '', pain: '', anchor_message: '', benefit: '', evidence: '' })
+                    }}
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>添加消息</span>
+                  </button>
+                </div>
+                <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-50 text-gray-600">
+                        <th className="px-3 py-2 text-left">Persona</th>
+                        <th className="px-3 py-2 text-left">渠道</th>
+                        <th className="px-3 py-2 text-left">痛点</th>
+                        <th className="px-3 py-2 text-left">话术</th>
+                        <th className="px-3 py-2 text-left">利益</th>
+                        <th className="px-3 py-2 text-left">证据</th>
+                        <th className="px-3 py-2 text-left">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {messagingRows.map((row, idx) => (
+                        <tr key={idx} className="border-t">
+                          <td className="px-3 py-2">{row.persona}</td>
+                          <td className="px-3 py-2">{row.channel}</td>
+                          <td className="px-3 py-2">{row.pain}</td>
+                          <td className="px-3 py-2">{row.anchor_message}</td>
+                          <td className="px-3 py-2">{row.benefit}</td>
+                          <td className="px-3 py-2">{row.evidence}</td>
+                          <td className="px-3 py-2">
+                            <button className="text-gray-500 hover:text-red-600" onClick={() => setMessagingRows(messagingRows.filter((_, i) => i !== idx))}>删除</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="text-sm text-gray-500 mb-2">预览</div>
+                <div className="space-y-3">
+                  <div className="text-lg font-semibold text-gray-900">{previewData.hero || '待填写电梯陈述'}</div>
+                  <div className="space-y-1">
+                    {messagingRows.slice(0, 3).map((m, i) => (
+                      <div key={i} className="text-sm text-gray-700">{m.anchor_message} · {m.benefit}</div>
+                    ))}
+                    {messagingRows.length === 0 && (
+                      <div className="text-sm text-gray-700">添加消息以生成预览片段</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'stories' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <input type="text" value={newStory.who} onChange={(e)=>setNewStory({...newStory, who: e.target.value})} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="谁" />
+                  <input type="text" value={newStory.when} onChange={(e)=>setNewStory({...newStory, when: e.target.value})} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="何时/情境" />
+                </div>
+                <input type="text" value={newStory.problem} onChange={(e)=>setNewStory({...newStory, problem: e.target.value})} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="问题" />
+                <input type="text" value={newStory.current_workaround} onChange={(e)=>setNewStory({...newStory, current_workaround: e.target.value})} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="现行做法" />
+                <input type="text" value={newStory.our_solution} onChange={(e)=>setNewStory({...newStory, our_solution: e.target.value})} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="我们的解决方案" />
+                <input type="text" value={newStory.expected_outcome} onChange={(e)=>setNewStory({...newStory, expected_outcome: e.target.value})} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="期望结果" />
+                <div className="flex items-center justify-end">
+                  <button
+                    className="inline-flex items-center space-x-2 bg-blue-600 text-white px-3 py-2 rounded-md text-sm"
+                    onClick={() => {
+                      const { who, when, problem, our_solution } = newStory
+                      if (!who.trim() || !when.trim() || !problem.trim() || !our_solution.trim()) return
+                      setStoriesData((prev)=>[...prev, { ...newStory }])
+                      setNewStory({ who:'', when:'', problem:'', current_workaround:'', our_solution:'', expected_outcome:'' })
+                    }}
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>添加故事</span>
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {storiesData.map((s, idx) => (
+                    <div key={idx} className="p-3 border border-gray-200 rounded-lg flex items-center justify-between">
+                      <div className="text-sm">
+                        <div className="font-medium text-gray-900">{s.who} · {s.when}</div>
+                        <div className="text-gray-600">{s.problem}</div>
+                      </div>
+                      <button className="text-gray-500 hover:text-red-600 text-sm" onClick={() => setStoriesData(storiesData.filter((_, i) => i !== idx))}>删除</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="text-sm text-gray-500 mb-2">预览</div>
+                <div className="space-y-3">
+                  <div className="text-lg font-semibold text-gray-900">{previewData.hero || '待填写电梯陈述'}</div>
+                  <div className="text-sm text-gray-700">{previewData.pains[0] || '添加场景故事以展示痛点'}</div>
+                  <div className="text-sm text-gray-700">{previewData.solution || '添加场景故事以展示解决方案'}</div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'overview' && (
-        <div className="mb-6 border border-gray-200 rounded-lg">
-          
-          {expandedSections.basic && (
-            <div className="p-4 space-y-4">
+            <div className="mb-6 border border-gray-200 rounded-lg">
+              
+              {expandedSections.basic && (
+                <div className="p-4 space-y-4">
               {editing.basic ? (
                 <>
                   <div className="grid grid-cols-2 gap-4">

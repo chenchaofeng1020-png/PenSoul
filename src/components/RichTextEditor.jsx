@@ -38,10 +38,11 @@ const RichTextEditor = ({
     }
   }
 
-  // 使用useEffect来初始化内容
+  // 仅在首次挂载时初始化内容，避免中文输入法合成过程中被重置
   useEffect(() => {
     initializeEditor()
-  }, [initialContent])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // 格式化命令
   const formatText = (command, value = null) => {
@@ -237,17 +238,27 @@ const RichTextEditor = ({
         <div
           ref={editorRef}
           contentEditable
-          className="p-4 focus:outline-none min-h-[400px] overflow-auto rich-text-editor"
+          className="p-4 focus:outline-none min-h-[400px] overflow-y-auto rich-text-editor"
           style={{ height }}
           onInput={(e) => {
-          setContent(e.target.innerHTML)
-          // 实时通知内容变化
-          if (onChange) {
-            onChange(e.target.innerHTML)
-          }
-        }}
-        suppressContentEditableWarning={true}
-        data-placeholder={placeholder}
+            setContent(e.target.innerHTML)
+            if (onChange) {
+              onChange(e.target.innerHTML)
+            }
+          }}
+          onCompositionStart={() => {
+            // 在输入法合成期间不进行外部重置，当前实现已避免重置，仅保留钩子以备扩展
+          }}
+          onCompositionEnd={(e) => {
+            // 合成结束时再同步一次，确保最终文本正确
+            const html = e.target.innerHTML
+            setContent(html)
+            if (onChange) {
+              onChange(html)
+            }
+          }}
+          suppressContentEditableWarning={true}
+          data-placeholder={placeholder}
         />
 
         {/* 图片上传模态框 */}

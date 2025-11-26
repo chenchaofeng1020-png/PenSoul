@@ -327,21 +327,58 @@ export async function getContentItems(productId, { platform, from, to } = {}) {
 
 export async function createContentItem(payload) {
   if (!hasSupabaseConfig()) throw new Error('未配置 Supabase')
-  const { product_id, platform, title, body, schedule_at, status } = payload
+  const { product_id, platform, title = '', body = '', schedule_at, status, topic_title = null } = payload
   console.time('api:createContentItem')
-  const insert = { product_id, platform, title, body, schedule_at, status }
-  const { data, error } = await supabase.from('content_items').insert(insert).select('*').single()
+  const insert = { product_id, platform, title, body, schedule_at, status, topic_title }
+  let data, error
+  try {
+    const res = await supabase.from('content_items').insert(insert).select('*').single()
+    data = res.data; error = res.error
+  } catch (e) {
+    error = e
+  }
   console.timeEnd('api:createContentItem')
-  if (error) throw new Error(error.message)
+  if (error) {
+    const msg = String(error.message || error)
+    const hasTopicError = /topic_title/i.test(msg)
+    const isSchemaCache = /schema cache/i.test(msg)
+    const isColumnMissing = /column\s+"?topic_title"?/i.test(msg) || /does not exist/i.test(msg)
+    if (hasTopicError || isSchemaCache || isColumnMissing) {
+      const fallback = { product_id, platform, title, body, schedule_at, status }
+      const { data: d2, error: e2 } = await supabase.from('content_items').insert(fallback).select('*').single()
+      if (e2) throw new Error(e2.message)
+      return d2
+    }
+    throw new Error(msg)
+  }
   return data
 }
 
 export async function updateContentItem(id, updates) {
   if (!hasSupabaseConfig()) throw new Error('未配置 Supabase')
   console.time('api:updateContentItem')
-  const { data, error } = await supabase.from('content_items').update(updates).eq('id', id).select('*').single()
+  let data, error
+  try {
+    const res = await supabase.from('content_items').update(updates).eq('id', id).select('*').single()
+    data = res.data; error = res.error
+  } catch (e) {
+    error = e
+  }
   console.timeEnd('api:updateContentItem')
-  if (error) throw new Error(error.message)
+  if (error) {
+    const msg = String(error.message || error)
+    const hasTopicError = /topic_title/i.test(msg)
+    const isSchemaCache = /schema cache/i.test(msg)
+    const isColumnMissing = /column\s+"?topic_title"?/i.test(msg) || /does not exist/i.test(msg)
+    if ((updates && Object.prototype.hasOwnProperty.call(updates, 'topic_title')) && (hasTopicError || isSchemaCache || isColumnMissing)) {
+      const clone = { ...updates }
+      delete clone.topic_title
+      const { data: d2, error: e2 } = await supabase.from('content_items').update(clone).eq('id', id).select('*').single()
+      if (e2) throw new Error(e2.message)
+      return d2
+    }
+    throw new Error(msg)
+  }
   return data
 }
 

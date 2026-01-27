@@ -6,7 +6,7 @@ const AddProductModal = ({ isOpen, onClose, onSubmit, editMode = false, initialD
     name: initialData?.name || '',
     logo: null
   })
-  const [logoPreview, setLogoPreview] = useState(initialData?.logo || null)
+  const [logoPreview, setLogoPreview] = useState(initialData?.logo_url || initialData?.logo || null)
   const [errors, setErrors] = useState({})
 
   const handleInputChange = (e) => {
@@ -148,16 +148,6 @@ const AddProductModal = ({ isOpen, onClose, onSubmit, editMode = false, initialD
                     className="w-full h-full object-cover"
                   />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFormData(prev => ({ ...prev, logo: null }))
-                    setLogoPreview(null)
-                  }}
-                  className="absolute -top-2 -right-2 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-all duration-200 shadow-lg hover:shadow-xl"
-                >
-                  <X size={14} />
-                </button>
                 <div className="mt-3">
                   <label
                     htmlFor="logo-upload"

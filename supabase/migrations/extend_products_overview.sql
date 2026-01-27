@@ -10,11 +10,17 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS release_date date;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS lifecycle_stage text;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS key_points jsonb DEFAULT '[]'::jsonb;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS use_cases jsonb DEFAULT '[]'::jsonb;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS value_proposition text;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS tagline text;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS status text DEFAULT 'active';
+ALTER TABLE products ADD COLUMN IF NOT EXISTS target_audience text;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS category text;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS tags jsonb DEFAULT '[]'::jsonb;
 
 -- 文档与 FAQ 表（若尚未创建）
 CREATE TABLE IF NOT EXISTS product_docs (
   id bigserial PRIMARY KEY,
-  product_id bigint NOT NULL,
+  product_id uuid NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   title text NOT NULL,
   doc_type text NOT NULL,
   url text NOT NULL,
@@ -27,7 +33,7 @@ CREATE INDEX IF NOT EXISTS idx_product_docs_product_id ON product_docs(product_i
 
 CREATE TABLE IF NOT EXISTS product_faqs (
   id bigserial PRIMARY KEY,
-  product_id bigint NOT NULL,
+  product_id uuid NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   question text NOT NULL,
   answer text NOT NULL,
   category text DEFAULT 'general',

@@ -31,7 +31,7 @@ export default function PlatformBadge({ id, size = 20, showLogo = true }){
   
   // 否则显示传统的颜色徽章
   const s = { width: size, height: size, backgroundColor: p?.color || '#ccc' }
-  const text = p?.abbr || (id || '').slice(0,2).toUpperCase()
+  const text = p?.abbr || ((id || '').slice(0,2).toUpperCase() || 'NA')
   return (
     <div className="rounded-md flex items-center justify-center text-white font-semibold" style={s}>
       <span style={{ fontSize: size*0.45 }}>{text}</span>

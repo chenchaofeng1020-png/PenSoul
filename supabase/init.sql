@@ -16,6 +16,31 @@ create table if not exists products (
   created_at timestamptz default now()
 );
 
+-- 兼容前端“产品定义”模块所需字段
+alter table products add column if not exists tagline text;
+alter table products add column if not exists positioning text;
+alter table products add column if not exists value_proposition text;
+alter table products add column if not exists target_audience text;
+alter table products add column if not exists category text;
+alter table products add column if not exists status text default 'active';
+alter table products add column if not exists version text;
+alter table products add column if not exists release_date date;
+alter table products add column if not exists industry text;
+alter table products add column if not exists docs_url text;
+alter table products add column if not exists demo_url text;
+alter table products add column if not exists download_url text;
+alter table products add column if not exists lifecycle_stage text;
+alter table products add column if not exists key_points jsonb default '[]'::jsonb;
+alter table products add column if not exists use_cases jsonb default '[]'::jsonb;
+alter table products add column if not exists tags jsonb default '[]'::jsonb;
+alter table products add column if not exists overview_short text;
+alter table products add column if not exists pain_point text;
+alter table products add column if not exists product_category text;
+alter table products add column if not exists key_benefit text;
+alter table products add column if not exists core_competitor text;
+alter table products add column if not exists differentiation text;
+alter table products add column if not exists competitive_highlights text default '';
+
 create index if not exists idx_products_owner on products(owner_id);
 
 create table if not exists competitors (
@@ -28,8 +53,16 @@ create table if not exists competitors (
   documentation_url text default '',
   logo_url text default '',
   main_customers text default '',
+  competitive_highlights text default '',
+  positioning text default '',
+  features text default '',
   created_at timestamptz default now()
 );
+
+-- 确保 competitors 表字段存在（用于兼容旧表）
+alter table competitors add column if not exists competitive_highlights text default '';
+alter table competitors add column if not exists positioning text default '';
+alter table competitors add column if not exists features text default '';
 
 create index if not exists idx_competitors_product on competitors(product_id);
 
@@ -142,4 +175,24 @@ create policy storage_insert_own on storage.objects for insert with check (
 );
 create policy storage_delete_own on storage.objects for delete using (
   bucket_id = 'screenshots'
+);
+
+-- 创建并公开 logos 存储桶
+insert into storage.buckets (id, name, public) 
+values ('logos', 'logos', true)
+on conflict (id) do nothing;
+
+
+drop policy if exists logos_select_public on storage.objects;
+drop policy if exists logos_insert_public on storage.objects;
+drop policy if exists logos_delete_public on storage.objects;
+
+create policy logos_select_public on storage.objects for select using (
+  bucket_id = 'logos'
+);
+create policy logos_insert_public on storage.objects for insert with check (
+  bucket_id = 'logos'
+);
+create policy logos_delete_public on storage.objects for delete using (
+  bucket_id = 'logos'
 );

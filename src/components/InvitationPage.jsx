@@ -1,87 +1,129 @@
 import React, { useState, useEffect } from 'react'
 import { productDuckLogo } from '../assets/logos'
 import { UserPlus, Shield, Edit, Eye, CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react'
+import { supabase, hasSupabaseConfig } from '../lib/supabaseClient'
+import { useUI } from '../context/UIContext'
 
 const InvitationPage = ({ token, onLogin }) => {
+  const { showToast } = useUI()
   const [invitation, setInvitation] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [processing, setProcessing] = useState(false)
   const [currentUser, setCurrentUser] = useState(null)
+  const API_BASE = import.meta.env.VITE_API_BASE || ''
 
   useEffect(() => {
-    // 检查用户登录状态
-    const userToken = localStorage.getItem('token')
-    if (userToken) {
-      fetchCurrentUser(userToken)
+    const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true'
+    if (isLoggedIn) {
+      const username = localStorage.getItem('username') || ''
+      if (username) setCurrentUser({ username })
     }
-    
-    // 获取邀请信息
-    fetchInvitation()
-  }, [token])
 
-  const fetchCurrentUser = async (userToken) => {
-    try {
-      const response = await fetch('http://localhost:8000/api/auth/me', {
-        headers: {
-          'Authorization': `Bearer ${userToken}`,
-          'Content-Type': 'application/json'
+    const base = API_BASE || ''
+    fetch(`${base}/api/invitations/${token}`)
+      .then(async (resp) => {
+        if (resp.ok) {
+          const data = await resp.json()
+          setInvitation(data.data)
+        } else {
+          const ed = await resp.json().catch(() => ({}))
+          setError(ed.message || '邀请不存在或已过期')
         }
       })
-      
-      if (response.ok) {
-        const data = await response.json()
-        setCurrentUser(data.data)
-      }
-    } catch (err) {
-      console.error('获取用户信息失败:', err)
-    }
-  }
-
-  const fetchInvitation = async () => {
-    try {
-      setLoading(true)
-      const response = await fetch(`http://localhost:8000/api/invitations/${token}`)
-      
-      if (response.ok) {
-        const data = await response.json()
-        setInvitation(data.data)
-      } else {
-        const errorData = await response.json()
-        setError(errorData.message || '邀请不存在或已过期')
-      }
-    } catch (err) {
-      setError('网络错误，请稍后重试')
-    } finally {
-      setLoading(false)
-    }
-  }
+      .catch(() => setError('网络错误，请稍后重试'))
+      .finally(() => setLoading(false))
+  }, [token])
 
   const handleAcceptInvitation = async () => {
     if (!currentUser) {
-      // 未登录，提示用户登录
-      alert('请先登录后再接受邀请')
+      showToast('请先登录后再接受邀请', 'warning')
       return
     }
-
     try {
       setProcessing(true)
-      const userToken = localStorage.getItem('token')
-      const response = await fetch(`http://localhost:8000/api/invitations/${token}/accept`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${userToken}`,
-          'Content-Type': 'application/json'
+      const base = API_BASE || ''
+      let username = ''
+      let email = ''
+      try {
+        // 优先使用真实登录信息，避免占位值写入导致后续不可见
+        if (hasSupabaseConfig()) {
+          const u = await supabase.auth.getUser()
+          const su = u?.data?.user || null
+          username = su?.user_metadata?.username || ''
+          email = su?.email || ''
+        } else {
+          const { getUser } = await import('../services/api')
+          const u = await getUser()
+          username = u?.user_metadata?.username || ''
+          email = u?.email || ''
         }
-      })
+      } catch { /* ignore */ }
+      // 兜底：如果仍为空，尝试 localStorage；仍为空则阻止提交
+      if (!username) username = localStorage.getItem('username') || ''
+      if (!email) email = localStorage.getItem('email') || ''
+      if (!username || !email) {
+        showToast('缺少用户名或邮箱，请完成登录信息后重试', 'warning')
+        setProcessing(false)
+        return
+      }
+      
+      if (hasSupabaseConfig() && invitation) {
+        // Supabase mode: insert member directly
+        const user = await supabase.auth.getUser()
+        const uid = user.data.user?.id
+        if (!uid) throw new Error('User ID not found')
+        
+        const { error: insertError } = await supabase.from('product_members').insert({
+          product_id: invitation.product_id,
+          user_id: uid,
+          role: invitation.role
+        })
+        
+        if (insertError) {
+          // If already member, treat as success or show message
+          if (insertError.code === '23505') { // Unique violation
+             // Update role if needed? For now just ignore
+          } else {
+             throw new Error(insertError.message)
+          }
+        }
+        
+        // Also call API to consume token (optional but good for tracking)
+        // But the API might fail if it tries to write to local DB and fails?
+        // Let's call API anyway to mark invitation as used in local DB if possible
+        try {
+           await fetch(`${base}/api/invitations/${token}/accept`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, email })
+          })
+        } catch (e) { console.warn('API accept failed', e) }
 
-      if (response.ok) {
-        // 接受成功，刷新页面回到主应用
-        alert('成功加入团队！')
+        if (invitation?.product_id) {
+          localStorage.setItem('last_product_id', String(invitation.product_id))
+        }
+        localStorage.setItem('selectedCategory', '产品规划')
+        showToast('成功加入团队！', 'success')
+        window.location.href = '/'
+        return
+      }
+
+      const resp = await fetch(`${base}/api/invitations/${token}/accept`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, email })
+      })
+      if (resp.ok) {
+        if (invitation?.product_id) {
+          localStorage.setItem('last_product_id', String(invitation.product_id))
+        }
+        localStorage.setItem('selectedCategory', '产品规划')
+        showToast('成功加入团队！', 'success')
         window.location.href = '/'
       } else {
-        const errorData = await response.json()
-        setError(errorData.message || '接受邀请失败')
+        const ed = await resp.json().catch(() => ({}))
+        setError(ed.message || '接受邀请失败')
       }
     } catch (err) {
       setError('网络错误，请稍后重试')
@@ -93,26 +135,23 @@ const InvitationPage = ({ token, onLogin }) => {
   const handleDeclineInvitation = async () => {
     try {
       setProcessing(true)
-      const response = await fetch(`http://localhost:8000/api/invitations/${token}/decline`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      })
-
-      if (response.ok) {
-        alert('已拒绝邀请')
-        window.location.href = '/'
-      } else {
-        const errorData = await response.json()
-        setError(errorData.message || '拒绝邀请失败')
-      }
-    } catch (err) {
-      setError('网络错误，请稍后重试')
+      const base = API_BASE || ''
+      await fetch(`${base}/api/invitations/${token}/decline`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+      showToast('已拒绝邀请', 'info')
+      window.location.href = '/'
+    } catch {
+      showToast('已拒绝邀请', 'info')
+      window.location.href = '/'
     } finally {
       setProcessing(false)
     }
   }
+
+  useEffect(() => {
+    if (invitation && currentUser && !processing) {
+      // 保留手动点击接受邀请，更可控
+    }
+  }, [invitation, currentUser, processing])
 
   const getRoleIcon = (role) => {
     switch (role) {

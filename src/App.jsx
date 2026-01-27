@@ -1,29 +1,52 @@
 import { useState, useEffect } from 'react'
 import { TrendingUp, Map, GitBranch } from 'lucide-react'
 import Sidebar from './components/Sidebar'
-import CompetitorList from './components/CompetitorList'
-import AddCompetitorModal from './components/AddCompetitorModal'
-import CompetitorDetailModal from './components/CompetitorDetailModal'
-import CompetitorDetailPage from './components/CompetitorDetailPage'
-import NewCompetitorDetailPage from './components/NewCompetitorDetailPage'
-import { logoSvgs } from './assets/logos'
-import RoadmapPage from './components/RoadmapPage'
-import TeamMemberPage from './components/TeamMemberPage'
+ 
+import { logoSvgs, productDuckLogo } from './assets/logos'
+ 
+import SettingsPage from './components/SettingsPage'
 import InvitationPage from './components/InvitationPage'
 import ContentPlanningPage from './components/ContentPlanningPage'
 import PlatformLogoTest from './components/PlatformLogoTest'
 import ProductDataManager from './components/ProductDataManager'
-import { register as apiRegister, login as apiLogin, getProducts, addProduct as apiAddProduct, getCompetitors as apiGetCompetitors, addCompetitor as apiAddCompetitor, getUser as apiGetUser } from './services/api'
+import UserProfilePage from './components/UserProfilePage'
+import IdeaIncubator from './components/IdeaIncubator'
+import SharedIdeaPage from './components/SharedIdeaPage'
+import TrendRadarPage from './components/TrendRadar/TrendRadarPage'
+import SmartTopicWorkbench from './components/SmartTopic/SmartTopicWorkbench'
+import IdeationConference from './components/IdeationConference'
+import PersonaLab from './components/PersonaLab'
+import LandingPage from './pages/LandingPage'
+import { register as apiRegister, login as apiLogin, getProducts, addProduct as apiAddProduct, getUser as apiGetUser, uploadProductLogo, updateProduct, acceptInvitation, updateUser as apiUpdateUser } from './services/api'
+import { translateAuthError } from './services/authErrors'
+import { useUI } from './context/UIContext'
 
 // 登录页面组件
-const LoginPage = ({ onLogin }) => {
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [email, setEmail] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [isRegisterMode, setIsRegisterMode] = useState(false)
+  const LoginPage = ({ onLogin, onBack }) => {
+    const { showToast } = useUI()
+    const [username, setUsername] = useState('')
+    const [password, setPassword] = useState('')
+    const [email, setEmail] = useState('')
+    const [isLoading, setIsLoading] = useState(false)
+    const [error, setError] = useState('')
+    const [isRegisterMode, setIsRegisterMode] = useState(false)
+    const [invitationInfo, setInvitationInfo] = useState(null)
+    const [showPassword, setShowPassword] = useState(false)
+    const [invitationCode, setInvitationCode] = useState('')
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search)
+    const invitationCode = searchParams.get('invitation')
+    if (invitationCode) {
+      setInvitationInfo({
+        code: invitationCode,
+        productName: searchParams.get('product') || '产品',
+        productId: searchParams.get('pid'),
+        role: searchParams.get('role')
+      })
+      setIsRegisterMode(true)
+    }
+  }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -33,17 +56,39 @@ const LoginPage = ({ onLogin }) => {
     try {
       if (isRegisterMode) {
         // 注册逻辑
-        if (!email || !username || !password || !confirmPassword) {
-          throw new Error('请填写所有字段')
-        }
-        if (password !== confirmPassword) {
-          throw new Error('两次输入的密码不一致')
+        if (!email || !username || !password || !invitationCode) {
+          throw new Error('请填写所有字段（包括邀请码）')
         }
         if (password.length < 6) {
           throw new Error('密码长度至少6位')
         }
 
-        await apiRegister({ username, email, password })
+        await apiRegister({ username, email, password, invitationCode })
+
+        // 如果是邀请注册，自动登录并接受邀请
+        if (invitationInfo) {
+           const { user, token, username: returnedUsername } = await apiLogin({ login: email, password })
+           localStorage.setItem('isLoggedIn', 'true')
+           localStorage.setItem('username', returnedUsername)
+           if (user && user.id) {
+             localStorage.setItem('user_id', user.id)
+           }
+           if (user && user.email) localStorage.setItem('email', user.email)
+           if (token) localStorage.setItem('token', token)
+           
+           await acceptInvitation(invitationInfo.code, { username: returnedUsername, email: user?.email })
+           
+           if (invitationInfo.productId) {
+             localStorage.setItem('last_product_id', invitationInfo.productId)
+           }
+           
+           // 清除URL参数
+           window.history.replaceState({}, document.title, '/')
+           
+           showToast(`注册成功！已自动加入【${invitationInfo.productName}】团队`, 'success')
+           onLogin(returnedUsername, user?.email, user?.id)
+           return
+        }
 
         // 注册成功，切换到登录模式
         setIsRegisterMode(false)
@@ -51,492 +96,291 @@ const LoginPage = ({ onLogin }) => {
         setUsername('')
         setEmail('')
         setPassword('')
-        setConfirmPassword('')
-        alert('注册成功！请登录')
+        showToast('注册成功！请登录', 'success')
       } else {
         // 登录逻辑
         if (!username || !password) {
           throw new Error('请输入用户名和密码')
         }
 
-        const { token, username: returnedUsername } = await apiLogin({ login: username, password })
+        const { user, token, username: returnedUsername } = await apiLogin({ login: username, password })
         localStorage.setItem('isLoggedIn', 'true')
         localStorage.setItem('username', returnedUsername)
+        if (user && user.id) {
+          localStorage.setItem('user_id', user.id)
+        }
+        if (user && user.email) localStorage.setItem('email', user.email)
         if (token) localStorage.setItem('token', token)
-        onLogin(returnedUsername)
+        onLogin(returnedUsername, user?.email, user?.id)
       }
     } catch (error) {
-      setError(error.message)
+      setError(translateAuthError(error.message))
     } finally {
       setIsLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-black flex items-center justify-center p-4 relative overflow-hidden">
-      {/* 星辰大海效果 */}
+    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative overflow-hidden">
+      {onBack && (
+        <button 
+          onClick={onBack}
+          className="absolute top-6 left-6 z-20 flex items-center text-slate-500 hover:text-blue-600 transition-colors font-medium"
+        >
+          <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+          返回官网
+        </button>
+      )}
+      {/* 现代感背景 */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {/* 闪烁的星星 */}
-        {[...Array(50)].map((_, i) => (
-          <div
-            key={`star-${i}`}
-            className="absolute rounded-full bg-white animate-pulse"
-            style={{
-              width: `${Math.random() * 3 + 1}px`,
-              height: `${Math.random() * 3 + 1}px`,
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 8}s`,
-              animationDuration: `${2 + Math.random() * 4}s`,
-              opacity: Math.random() * 0.8 + 0.2,
-              boxShadow: `0 0 ${Math.random() * 6 + 2}px rgba(255, 255, 255, ${Math.random() * 0.5 + 0.3})`,
-              filter: 'blur(0.3px)'
-            }}
-          ></div>
-        ))}
-        
-        {/* 大一点的亮星 */}
-        {[...Array(15)].map((_, i) => (
-          <div
-            key={`brightstar-${i}`}
-            className="absolute rounded-full"
-            style={{
-              width: '4px',
-              height: '4px',
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              background: `radial-gradient(circle, rgba(${Math.random() > 0.5 ? '34, 211, 238' : '163, 230, 53'}, 0.9) 0%, transparent 70%)`,
-              animation: 'starTwinkle 3s ease-in-out infinite',
-              animationDelay: `${Math.random() * 6}s`,
-              boxShadow: `0 0 15px rgba(${Math.random() > 0.5 ? '34, 211, 238' : '163, 230, 53'}, 0.6)`,
-            }}
-          ></div>
-        ))}
-        
-        {/* 流星效果 */}
-        {[...Array(3)].map((_, i) => (
-          <div
-            key={`meteor-${i}`}
-            className="absolute"
-            style={{
-              width: '2px',
-              height: '100px',
-              background: 'linear-gradient(to bottom, rgba(34, 211, 238, 0.8), transparent)',
-              left: `${20 + Math.random() * 60}%`,
-              top: '-100px',
-              transform: 'rotate(45deg)',
-              animation: 'meteor 8s linear infinite',
-              animationDelay: `${Math.random() * 10}s`,
-              filter: 'blur(0.5px)',
-              boxShadow: '0 0 10px rgba(34, 211, 238, 0.6)'
-            }}
-          ></div>
-        ))}
-        
-        {/* 宇宙尘埃效果 */}
-        <div className="absolute inset-0 opacity-20">
-          <div className="absolute inset-0" style={{
-            backgroundImage: `
-              radial-gradient(circle at 20% 80%, rgba(163, 230, 53, 0.1) 0%, transparent 50%),
-              radial-gradient(circle at 80% 20%, rgba(34, 211, 238, 0.1) 0%, transparent 50%),
-              radial-gradient(circle at 40% 40%, rgba(251, 146, 60, 0.08) 0%, transparent 50%)
-            `,
-            animation: 'nebula 25s ease-in-out infinite'
-          }}></div>
+        <div className="absolute -top-[20%] -right-[10%] w-[800px] h-[800px] rounded-full bg-gradient-to-br from-blue-500/10 to-blue-500/10 blur-3xl opacity-60 mix-blend-multiply animate-blob" />
+        <div className="absolute -bottom-[20%] -left-[10%] w-[800px] h-[800px] rounded-full bg-gradient-to-tr from-blue-500/10 to-cyan-500/10 blur-3xl opacity-60 mix-blend-multiply animate-blob animation-delay-2000" />
+        <div className="absolute top-[40%] left-[30%] w-[600px] h-[600px] rounded-full bg-gradient-to-r from-sky-500/10 to-cyan-500/10 blur-3xl opacity-40 mix-blend-multiply animate-blob animation-delay-4000" />
+      </div>
+
+      <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">
+        <div 
+          className={`flex flex-row items-center justify-center gap-5 ${onBack ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
+          onClick={onBack}
+          title={onBack ? "点击返回官网" : ""}
+        >
+            {/* 新设计的 Duck Logo - 更现代、简洁 */}
+            <div className="h-14 w-14 bg-gradient-to-tr from-blue-600 via-blue-500 to-sky-500 rounded-2xl flex items-center justify-center shadow-xl shadow-blue-500/20 transform hover:scale-105 transition-all duration-300 ring-4 ring-white/50">
+                <svg className="w-9 h-9 text-white" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  {/* 鸭子主体 */}
+                  <path d="M75 55C75 74.33 59.33 90 40 90C20.67 90 5 74.33 5 55C5 35.67 20.67 20 40 20C50 20 58.5 24 65 30" stroke="white" strokeWidth="6" strokeLinecap="round"/>
+                  {/* 头部和嘴巴 */}
+                  <path d="M65 30C75 30 85 35 85 45C85 50 80 55 75 55" stroke="white" strokeWidth="6" strokeLinecap="round"/>
+                  <path d="M85 45H95" stroke="white" strokeWidth="6" strokeLinecap="round"/>
+                  {/* 眼睛 */}
+                  <circle cx="45" cy="45" r="5" fill="white"/>
+                </svg>
+            </div>
+            <h2 className="text-3xl font-bold tracking-tight text-slate-900 font-sans">
+              Product Duck
+            </h2>
         </div>
-        
-        {/* 远山星系 */}
-        <div className="absolute inset-0 opacity-15">
-          {[...Array(8)].map((_, i) => (
-            <div
-              key={`galaxy-${i}`}
-              className="absolute rounded-full"
-              style={{
-                width: `${20 + Math.random() * 40}px`,
-                height: `${20 + Math.random() * 40}px`,
-                left: `${Math.random() * 100}%`,
-                top: `${Math.random() * 100}%`,
-                background: `radial-gradient(ellipse, rgba(${Math.random() > 0.6 ? '34, 211, 238' : Math.random() > 0.3 ? '163, 230, 53' : '251, 146, 60'}, 0.3) 0%, transparent 70%)`,
-                animation: 'galaxyFloat 20s ease-in-out infinite',
-                animationDelay: `${Math.random() * 15}s`,
-                filter: 'blur(1px)'
-              }}
-            ></div>
-          ))}
-        </div>
+        {/* 副标题已移除 */}
       </div>
 
-      {/* 科技感网格背景 */}
-      <div className="absolute inset-0 opacity-30">
-        <div className="absolute inset-0" style={{
-          backgroundImage: `
-            linear-gradient(rgba(0, 255, 255, 0.1) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(0, 255, 255, 0.1) 1px, transparent 1px),
-            linear-gradient(rgba(0, 255, 127, 0.05) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(0, 255, 127, 0.05) 1px, transparent 1px)
-          `,
-          backgroundSize: '40px 40px, 40px 40px, 100px 100px, 100px 100px',
-          animation: 'techGrid 20s linear infinite'
-        }}></div>
-      </div>
-
-      {/* 发光的科技线条 */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {/* 主要扫描线 */}
-        <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-cyan-400/80 to-transparent" 
-             style={{animation: 'scanLine 8s ease-in-out infinite'}}></div>
-        <div className="absolute top-0 left-0 w-px h-full bg-gradient-to-b from-transparent via-emerald-400/70 to-transparent" 
-             style={{animation: 'scanLineVertical 12s ease-in-out infinite', animationDelay: '2s'}}></div>
-        
-        {/* 科技数据流 */}
-        <div className="absolute top-1/4 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-cyan-300/60 via-teal-300/60 to-transparent" 
-             style={{animation: 'dataFlow 6s ease-in-out infinite', animationDelay: '1s'}}></div>
-        <div className="absolute bottom-1/3 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-lime-400/50 via-green-400/50 to-transparent" 
-             style={{animation: 'dataFlow 10s ease-in-out infinite', animationDelay: '4s'}}></div>
-        
-        {/* 垂直数据流 */}
-        <div className="absolute left-1/3 top-0 w-0.5 h-full bg-gradient-to-b from-transparent via-yellow-400/45 via-orange-400/45 to-transparent" 
-             style={{animation: 'dataFlowVertical 15s ease-in-out infinite', animationDelay: '3s'}}></div>
-        <div className="absolute right-1/4 top-0 w-0.5 h-full bg-gradient-to-b from-transparent via-cyan-400/40 via-blue-400/40 to-transparent" 
-             style={{animation: 'dataFlowVertical 8s ease-in-out infinite', animationDelay: '6s'}}></div>
-      </div>
-
-      {/* 科技感装饰元素 */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {/* 发光圆点 */}
-        <div className="absolute top-16 right-20 w-3 h-3 bg-cyan-400/80 rounded-full" 
-             style={{animation: 'techPulse 3s ease-in-out infinite', boxShadow: '0 0 25px rgba(34, 211, 238, 0.6)'}}></div>
-        <div className="absolute bottom-20 left-16 w-2 h-2 bg-lime-400/90 rounded-full" 
-             style={{animation: 'techPulse 4s ease-in-out infinite', animationDelay: '1s', boxShadow: '0 0 20px rgba(163, 230, 53, 0.7)'}}></div>
-        <div className="absolute top-1/3 left-1/5 w-2.5 h-2.5 bg-orange-400/80 rounded-full" 
-             style={{animation: 'techPulse 5s ease-in-out infinite', animationDelay: '2.5s', boxShadow: '0 0 22px rgba(251, 146, 60, 0.6)'}}></div>
-        
-        {/* 科技方块 */}
-        <div className="absolute bottom-1/4 right-1/5 w-4 h-4 border border-cyan-400/70 bg-cyan-400/20" 
-             style={{animation: 'techRotate 6s linear infinite', transform: 'rotate(45deg)'}}></div>
-        <div className="absolute top-3/4 right-1/3 w-3 h-3 border border-emerald-400/60 bg-emerald-400/15" 
-             style={{animation: 'techRotate 8s linear infinite reverse', transform: 'rotate(45deg)', animationDelay: '2s'}}></div>
-        
-        {/* 科技三角形 */}
-        <div className="absolute top-1/2 left-8 w-0 h-0" 
-             style={{
-               borderLeft: '8px solid transparent',
-               borderRight: '8px solid transparent', 
-               borderBottom: '12px solid rgba(34, 211, 238, 0.5)',
-               animation: 'techFloat 7s ease-in-out infinite',
-               filter: 'drop-shadow(0 0 15px rgba(34, 211, 238, 0.5))'
-             }}></div>
-        <div className="absolute bottom-1/2 right-8 w-0 h-0" 
-             style={{
-               borderLeft: '6px solid transparent',
-               borderRight: '6px solid transparent',
-               borderTop: '10px solid rgba(163, 230, 53, 0.6)',
-               animation: 'techFloat 9s ease-in-out infinite',
-               animationDelay: '3s',
-               filter: 'drop-shadow(0 0 12px rgba(163, 230, 53, 0.5))'
-             }}></div>
-      </div>
-
-      {/* 科技光环效果 */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-25">
-        <div className="absolute top-1/4 left-1/4 w-32 h-32 rounded-full border border-cyan-400/40" 
-             style={{animation: 'techRing 12s linear infinite'}}></div>
-        <div className="absolute bottom-1/3 right-1/3 w-24 h-24 rounded-full border border-lime-400/35" 
-             style={{animation: 'techRing 15s linear infinite reverse', animationDelay: '4s'}}></div>
-        <div className="absolute top-2/3 left-2/3 w-20 h-20 rounded-full border border-orange-400/30" 
-             style={{animation: 'techRing 10s linear infinite', animationDelay: '8s'}}></div>
-      </div>
-
-      <div className="relative z-10 w-full max-w-96 transform transition-all duration-700 hover:scale-105">
-        <div className="bg-slate-800/40 backdrop-blur-3xl rounded-3xl border border-white/10 p-14 relative overflow-hidden group shadow-2xl">
-          {/* 多层渐变背景 */}
-          <div className="absolute inset-0 bg-gradient-to-br from-indigo-900/30 via-purple-900/20 to-slate-900/40 rounded-3xl"></div>
-          <div className="absolute inset-0 bg-gradient-to-tr from-blue-800/20 via-transparent to-violet-800/25 rounded-3xl"></div>
-          <div className="absolute inset-0 bg-gradient-to-bl from-transparent via-emerald-900/10 to-cyan-900/15 rounded-3xl"></div>
-          
-          {/* 顶部彩虹线 */}
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-400 via-purple-400 via-cyan-400 via-emerald-400 to-blue-400 rounded-t-3xl opacity-80"></div>
-          
-          {/* 动态边框光效 */}
-          <div className="absolute inset-0 rounded-3xl">
-            <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-indigo-400/20 via-purple-500/30 via-cyan-500/25 to-blue-500/20 opacity-60 group-hover:opacity-90 transition-opacity duration-700"></div>
-            <div className="absolute inset-0 rounded-3xl bg-gradient-to-bl from-emerald-400/15 via-teal-400/20 to-blue-400/15 opacity-40 group-hover:opacity-70 transition-opacity duration-700 delay-200"></div>
-          </div>
-          
-          {/* 内部装饰光点 */}
-          <div className="absolute top-6 right-6 w-3 h-3 bg-indigo-400/80 rounded-full animate-pulse shadow-lg"></div>
-          <div className="absolute bottom-6 left-6 w-2 h-2 bg-purple-400/80 rounded-full animate-pulse delay-1000 shadow-lg"></div>
-          <div className="absolute top-8 left-8 w-1.5 h-1.5 bg-cyan-400/70 rounded-full animate-pulse delay-500 shadow-md"></div>
-          <div className="absolute bottom-8 right-8 w-2.5 h-2.5 bg-emerald-400/70 rounded-full animate-pulse delay-1500 shadow-lg"></div>
-          
-          {/* 流动光效 */}
-          <div className="absolute inset-0 rounded-3xl overflow-hidden">
-            <div className="absolute w-full h-full bg-gradient-to-r from-transparent via-white/5 to-transparent transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-2000 ease-out"></div>
-          </div>
-          
-          <div className="relative z-10">
-            {/* Logo和标题 - 增强版 */}
-            <div className="text-center mb-10">
-              {/* Logo和标题的水平布局 */}
-              <div className="flex items-center justify-center mb-4 space-x-6">
-                {/* Logo光晕效果 */}
-                <div className="relative w-16 h-16 flex-shrink-0">
-                  <div className="absolute -inset-2 bg-gradient-to-tr from-blue-400/40 via-violet-400/35 to-emerald-400/25 rounded-full blur-lg animate-pulse delay-500 opacity-60"></div>
-                  <div className="relative w-full h-full bg-gradient-to-br from-indigo-500 via-blue-500 to-purple-600 rounded-full flex items-center justify-center shadow-2xl border border-white/30">
-                    <svg className="w-8 h-8 text-white drop-shadow-lg" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-                    </svg>
-                  </div>
+      <div className="mt-10 sm:mx-auto sm:w-full sm:max-w-[440px] relative z-10">
+        <div className="bg-white/90 backdrop-blur-md py-10 px-8 shadow-2xl shadow-slate-200/50 border border-white/60 rounded-3xl sm:px-12 transition-all hover:shadow-blue-500/10">
+          <form className="space-y-5" onSubmit={handleSubmit}>
+            {!isRegisterMode ? (
+                <div className="space-y-5">
+                    <div>
+                        <label htmlFor="username" className="block text-sm font-semibold text-slate-700 ml-1 mb-2">用户名 / 邮箱</label>
+                        <div className="relative group">
+                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                <svg className="h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                                </svg>
+                            </div>
+                            <input id="username" type="text" required value={username} onChange={(e) => setUsername(e.target.value)}
+                                className="block w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-200 sm:text-sm font-medium" 
+                                placeholder="请输入您的账号" />
+                        </div>
+                    </div>
+                    <div>
+                        <div className="flex items-center justify-between mb-2">
+                            <label htmlFor="password" className="block text-sm font-semibold text-slate-700 ml-1">密码</label>
+                            <a href="#" className="text-xs font-semibold text-blue-600 hover:text-blue-500 transition-colors">忘记密码?</a>
+                        </div>
+                        <div className="relative group">
+                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                <svg className="h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                                </svg>
+                            </div>
+                            <input id="password" type={showPassword ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)}
+                                className="block w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-200 sm:text-sm font-medium" 
+                                placeholder="请输入您的密码" />
+                            <button
+                              type="button"
+                              onClick={() => setShowPassword(prev => !prev)}
+                              className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                              aria-label={showPassword ? '隐藏密码' : '显示密码'}
+                            >
+                              {showPassword ? (
+                                <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+                                  <path d="M3 3l18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                                  <path d="M10.73 5.08A9.77 9.77 0 0112 5c5 0 9 3.5 10 7-0.33 1.22-1.05 2.4-2.08 3.42M6.1 6.1C4.19 7.4 2.83 9.08 2 12c1 3.5 5 7 10 7 1.03 0 2.02-.16 2.96-.45" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              ) : (
+                                <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+                                  <path d="M12 5c5 0 9 3.5 10 7-1 3.5-5 7-10 7S3 15.5 2 12c1-3.5 5-7 10-7z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
+                                </svg>
+                              )}
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                
-                {/* 产品鸭标题 */}
-                <h1 className="text-5xl font-bold bg-gradient-to-r from-white via-blue-100 via-purple-100 to-cyan-100 bg-clip-text text-transparent tracking-wide drop-shadow-lg">产品鸭</h1>
+            ) : (
+                <div className="space-y-4">
+                    <div>
+                        <label htmlFor="username" className="block text-sm font-semibold text-slate-700 ml-1 mb-1">用户名</label>
+                        <div className="relative group">
+                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                <svg className="h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                                </svg>
+                            </div>
+                            <input id="username" type="text" required value={username} onChange={(e) => setUsername(e.target.value)}
+                                className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-200 sm:text-sm font-medium" 
+                                placeholder="设置用户名" />
+                        </div>
+                    </div>
+                    <div>
+                        <label htmlFor="email" className="block text-sm font-semibold text-slate-700 ml-1 mb-1">邮箱</label>
+                        <div className="relative group">
+                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                <svg className="h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
+                                    <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+                                </svg>
+                            </div>
+                            <input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
+                                className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-200 sm:text-sm font-medium" 
+                                placeholder="your@email.com" />
+                        </div>
+                    </div>
+                    <div>
+                        <label htmlFor="password" className="block text-sm font-semibold text-slate-700 ml-1 mb-1">密码</label>
+                        <div className="relative group">
+                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                <svg className="h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                                </svg>
+                            </div>
+                            <input id="password" type={showPassword ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)}
+                                className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-200 sm:text-sm font-medium" 
+                                placeholder="设置密码" />
+                            <button
+                              type="button"
+                              onClick={() => setShowPassword(prev => !prev)}
+                              className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                              aria-label={showPassword ? '隐藏密码' : '显示密码'}
+                            >
+                              {showPassword ? (
+                                <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+                                  <path d="M3 3l18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                                  <path d="M10.73 5.08A9.77 9.77 0 0112 5c5 0 9 3.5 10 7-0.33 1.22-1.05 2.4-2.08 3.42M6.1 6.1C4.19 7.4 2.83 9.08 2 12c1 3.5 5 7 10 7 1.03 0 2.02-.16 2.96-.45" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              ) : (
+                                <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+                                  <path d="M12 5c5 0 9 3.5 10 7-1 3.5-5 7-10 7S3 15.5 2 12c1-3.5 5-7 10-7z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
+                                </svg>
+                              )}
+                            </button>
+                        </div>
+                    </div>
+                    <div>
+                        <label htmlFor="invitationCode" className="block text-sm font-semibold text-slate-700 ml-1 mb-1">邀请码 <span className="text-red-500">*</span></label>
+                        <div className="relative group">
+                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                <svg className="h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                                </svg>
+                            </div>
+                            <input id="invitationCode" type="text" required value={invitationCode} onChange={(e) => setInvitationCode(e.target.value)}
+                                className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-200 sm:text-sm font-medium" 
+                                placeholder="请输入邀请码" />
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {error && (
+              <div className="rounded-xl bg-red-50 p-4 border border-red-100 flex items-start">
+                <svg className="h-5 w-5 text-red-400 mt-0.5 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+                <h3 className="text-sm font-medium text-red-800">{error}</h3>
               </div>
-              <p className="text-white/90 text-lg mb-8 font-medium tracking-wide drop-shadow-md">🚀 智能竞品分析平台</p>
-              <div className="flex justify-center space-x-2 mb-4">
-                <div className="w-20 h-1 bg-gradient-to-r from-indigo-400 to-purple-400 rounded-full"></div>
-                <div className="w-12 h-1 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full"></div>
-                <div className="w-16 h-1 bg-gradient-to-r from-cyan-400 to-blue-400 rounded-full"></div>
+            )}
+
+            <div>
+              <button type="submit" disabled={isLoading}
+                className="w-full flex justify-center py-3.5 px-4 border border-transparent rounded-xl shadow-lg shadow-blue-500/30 text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-sky-600 hover:from-blue-500 hover:to-sky-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:shadow-none transition-all duration-300 transform hover:-translate-y-0.5 active:scale-[0.98]">
+                {isLoading ? (
+                    <span className="flex items-center">
+                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        处理中...
+                    </span>
+                ) : (isRegisterMode ? '立即注册' : '登录系统')}
+              </button>
+            </div>
+          </form>
+
+          <div className="mt-8">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-200" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 bg-white text-slate-500 font-medium">
+                  {isRegisterMode ? '已有账户？' : '还没有账户？'}
+                </span>
               </div>
             </div>
 
-            {/* 条件渲染：登录或注册表单 */}
-            {!isRegisterMode ? (
-                <>
-                {/* 登录表单 */}
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  <div className="space-y-4">
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg className="h-5 w-5 text-white/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                      </div>
-                      <input
-                        type="text"
-                        required
-                        className="login-input w-full pl-10 pr-4 py-4 bg-white/15 border border-white/30 rounded-2xl text-white placeholder-white/90 focus:outline-none focus:ring-2 focus:ring-indigo-400/60 focus:border-indigo-400/50 focus:bg-white/20 transition-all duration-500 backdrop-blur-xl shadow-xl hover:shadow-2xl hover:bg-white/18 hover:border-white/40"
-                        placeholder="用户名"
-                        value={username}
-                        onChange={(e) => setUsername(e.target.value)}
-                      />
-                    </div>
-
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg className="h-5 w-5 text-white/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                        </svg>
-                      </div>
-                      <input
-                        type="password"
-                        required
-                        className="login-input w-full pl-10 pr-4 py-4 bg-white/15 border border-white/30 rounded-2xl text-white placeholder-white/90 focus:outline-none focus:ring-2 focus:ring-indigo-400/60 focus:border-indigo-400/50 focus:bg-white/20 transition-all duration-500 backdrop-blur-xl shadow-xl hover:shadow-2xl hover:bg-white/18 hover:border-white/40"
-                        placeholder="密码"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  {error && (
-                    <div className="bg-red-500/20 border border-red-500/30 rounded-lg p-3 text-red-200 text-sm">
-                      {error}
-                    </div>
-                  )}
-
-                  <button
-                    type="submit"
-                    disabled={isLoading}
-                    className="w-full bg-gradient-to-r from-indigo-500 via-purple-500 via-cyan-500 to-blue-500 hover:from-indigo-600 hover:via-purple-600 hover:via-cyan-600 hover:to-blue-600 text-white font-bold py-4 px-6 rounded-2xl transition-all duration-500 transform hover:scale-105 hover:shadow-2xl focus:outline-none focus:ring-4 focus:ring-indigo-400/40 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none shadow-2xl relative overflow-hidden group"
-                  >
-                    {/* 增强的按钮光效 */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 via-cyan-200/20 to-transparent transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1200 ease-out"></div>
-                    <div className="absolute inset-0 bg-gradient-to-l from-transparent via-indigo-200/15 to-transparent transform skew-x-12 translate-x-full group-hover:-translate-x-full transition-transform duration-1000 ease-out delay-200"></div>
-                    <div className="relative z-10 flex items-center justify-center">
-                      {isLoading ? (
-                        <>
-                          <svg className="animate-spin -ml-1 mr-3 h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          <span className="text-lg">登录中...</span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="text-lg font-bold tracking-wide">✨ 立即登录</span>
-                          <svg className="w-6 h-6 ml-3 transform group-hover:translate-x-1 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                          </svg>
-                        </>
-                      )}
-                    </div>
-                  </button>
-                </form>
-                
-                {/* 注册入口 */}
-                <div className="text-center mt-6">
-                  <p className="text-white/70 text-sm">
-                    还没有账户？
-                    <button
-                      type="button"
-                      onClick={() => {
-                          setIsRegisterMode(true)
-                          setError('')
-                          setUsername('')
-                          setPassword('')
-                          setEmail('')
-                          setConfirmPassword('')
-                        }}
-                      className="text-blue-300 hover:text-blue-200 ml-1 underline transition-colors duration-200"
-                    >
-                      立即注册
-                    </button>
-                  </p>
-                </div>
-              </>
-            ) : (
-              <div className="max-h-80 overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/20 hover:scrollbar-thumb-white/30">
-                <>
-                {/* 注册表单 */}
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  <div className="space-y-4">
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg className="h-5 w-5 text-white/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                      </div>
-                      <input
-                        type="text"
-                        required
-                        className="login-input w-full pl-10 pr-4 py-4 bg-white/15 border border-white/30 rounded-2xl text-white placeholder-white/90 focus:outline-none focus:ring-2 focus:ring-indigo-400/60 focus:border-indigo-400/50 focus:bg-white/20 transition-all duration-500 backdrop-blur-xl shadow-xl hover:shadow-2xl hover:bg-white/18 hover:border-white/40"
-                        placeholder="用户名"
-                        value={username}
-                        onChange={(e) => setUsername(e.target.value)}
-                      />
-                    </div>
-
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg className="h-5 w-5 text-white/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
-                        </svg>
-                      </div>
-                      <input
-                        type="email"
-                        required
-                        className="login-input w-full pl-10 pr-4 py-4 bg-white/15 border border-white/30 rounded-2xl text-white placeholder-white/90 focus:outline-none focus:ring-2 focus:ring-indigo-400/60 focus:border-indigo-400/50 focus:bg-white/20 transition-all duration-500 backdrop-blur-xl shadow-xl hover:shadow-2xl hover:bg-white/18 hover:border-white/40"
-                        placeholder="邮箱"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                      />
-                    </div>
-
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg className="h-5 w-5 text-white/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                        </svg>
-                      </div>
-                      <input
-                        type="password"
-                        required
-                        className="login-input w-full pl-10 pr-4 py-4 bg-white/15 border border-white/30 rounded-2xl text-white placeholder-white/90 focus:outline-none focus:ring-2 focus:ring-indigo-400/60 focus:border-indigo-400/50 focus:bg-white/20 transition-all duration-500 backdrop-blur-xl shadow-xl hover:shadow-2xl hover:bg-white/18 hover:border-white/40"
-                        placeholder="密码"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                      />
-                    </div>
-
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg className="h-5 w-5 text-white/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </div>
-                      <input
-                        type="password"
-                        required
-                        className="login-input w-full pl-10 pr-4 py-4 bg-white/15 border border-white/30 rounded-2xl text-white placeholder-white/90 focus:outline-none focus:ring-2 focus:ring-indigo-400/60 focus:border-indigo-400/50 focus:bg-white/20 transition-all duration-500 backdrop-blur-xl shadow-xl hover:shadow-2xl hover:bg-white/18 hover:border-white/40"
-                        placeholder="确认密码"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  {error && (
-                    <div className="bg-red-500/20 border border-red-500/30 rounded-lg p-3 text-red-200 text-sm">
-                      {error}
-                    </div>
-                  )}
-
-                  <button
-                    type="submit"
-                    disabled={isLoading}
-                    className="w-full bg-gradient-to-r from-indigo-500 via-purple-500 via-cyan-500 to-blue-500 hover:from-indigo-600 hover:via-purple-600 hover:via-cyan-600 hover:to-blue-600 text-white font-bold py-4 px-6 rounded-2xl transition-all duration-500 transform hover:scale-105 hover:shadow-2xl focus:outline-none focus:ring-4 focus:ring-indigo-400/40 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none shadow-2xl relative overflow-hidden group"
-                  >
-                    {/* 增强的按钮光效 */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 via-cyan-200/20 to-transparent transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1200 ease-out"></div>
-                    <div className="absolute inset-0 bg-gradient-to-l from-transparent via-indigo-200/15 to-transparent transform skew-x-12 translate-x-full group-hover:-translate-x-full transition-transform duration-1000 ease-out delay-200"></div>
-                    <div className="relative z-10 flex items-center justify-center">
-                      {isLoading ? (
-                        <>
-                          <svg className="animate-spin -ml-1 mr-3 h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          <span className="text-lg">注册中...</span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="text-lg font-bold tracking-wide">🚀 立即注册</span>
-                          <svg className="w-6 h-6 ml-3 transform group-hover:translate-x-1 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                          </svg>
-                        </>
-                      )}
-                    </div>
-                  </button>
-                </form>
-                
-                {/* 登录入口 */}
-                <div className="text-center mt-6">
-                  <p className="text-white/70 text-sm">
-                    已有账户？
-                    <button
-                      type="button"
-                      onClick={() => {
-                         setIsRegisterMode(false)
-                         setError('')
-                         setUsername('')
-                         setPassword('')
-                         setEmail('')
-                         setConfirmPassword('')
-                       }}
-                      className="text-blue-300 hover:text-blue-200 ml-1 underline transition-colors duration-200"
-                    >
-                      立即登录
-                    </button>
-                  </p>
-                </div>
-                </>
-              </div>
-            )}
+            <div className="mt-6">
+              <button
+                type="button"
+                onClick={() => {
+                    setIsRegisterMode(!isRegisterMode)
+                    setError('')
+                    setUsername('')
+                    setPassword('')
+                    setEmail('')
+                }}
+                className="w-full inline-flex justify-center py-3.5 px-4 border border-slate-200 rounded-xl shadow-sm bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:text-blue-600 focus:outline-none transition-all duration-200"
+              >
+                {isRegisterMode ? '返回登录' : '免费注册账户'}
+              </button>
+            </div>
           </div>
         </div>
+        
+        {/* 底部版权信息 */}
+        <p className="mt-8 text-center text-xs text-slate-400/80 font-medium">
+            &copy; {new Date().getFullYear()} Product Duck. All rights reserved.
+        </p>
       </div>
     </div>
   )
 }
 
 function App() {
+  useEffect(() => {
+    document.title = '产品鸭'
+    let link = document.querySelector("link[rel='icon']")
+    if (!link) {
+      link = document.createElement('link')
+      link.rel = 'icon'
+      link.type = 'image/svg+xml'
+      document.head.appendChild(link)
+    }
+    link.href = productDuckLogo
+  }, [])
+  const { showToast } = useUI()
   const [competitors, setCompetitors] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState(() => {
-    const v = localStorage.getItem('selectedCategory') || '产品路线图'
-    return (v || '').trim()
+    let v = localStorage.getItem('selectedCategory') || '产品规划'
+    v = (v || '').trim()
+    if (['产品路线图', '竞品管理'].includes(v)) {
+      v = '产品规划'
+    }
+    if (v === '趋势雷达') {
+      v = '热点内容'
+    }
+    return v
   })
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [selectedCompetitor, setSelectedCompetitor] = useState(() => {
@@ -591,10 +435,20 @@ function App() {
   const [currentUser, setCurrentUser] = useState(() => {
     return localStorage.getItem('username') || ''
   })
+  const [currentUserId, setCurrentUserId] = useState(() => {
+    return localStorage.getItem('user_id') || ''
+  })
+  const [userEmail, setUserEmail] = useState(() => {
+    return localStorage.getItem('email') || ''
+  })
+  const [userAvatar, setUserAvatar] = useState(() => {
+    return localStorage.getItem('user_avatar') || ''
+  })
 
   // 检查URL中是否有邀请token
   const urlParams = new URLSearchParams(window.location.search)
   const invitationToken = urlParams.get('invitation')
+  const sharedIdeaId = urlParams.get('share_idea')
 
   // 当selectedCategory改变时，保存到localStorage
   useEffect(() => {
@@ -603,12 +457,43 @@ function App() {
   }, [selectedCategory])
 
   const [isLoadingProducts, setIsLoadingProducts] = useState(false)
+  const [isCreatingProduct, setIsCreatingProduct] = useState(false)
+  const [trendPlanData, setTrendPlanData] = useState(null)
+  // 初始化时，如果URL中有邀请码，则默认显示登录页；否则显示官网
+  const [isLoginPageVisible, setIsLoginPageVisible] = useState(() => {
+    const params = new URLSearchParams(window.location.search)
+    return !!params.get('invitation')
+  })
 
   useEffect(() => {
     if (isLoggedIn && currentUser) {
       loadUserProducts()
     }
-  }, [isLoggedIn, currentUser])
+    // 如果已登录，尝试获取用户信息（头像等）
+    if (isLoggedIn) {
+      apiGetUser().then(user => {
+        if (user) {
+          if (user.id && user.id !== currentUserId) {
+            setCurrentUserId(user.id)
+            localStorage.setItem('user_id', user.id)
+          }
+          if (user.email && !userEmail) {
+            setUserEmail(user.email)
+            localStorage.setItem('email', user.email)
+          }
+          const meta = user.user_metadata || {}
+          if (meta.avatar && meta.avatar !== userAvatar) {
+            setUserAvatar(meta.avatar)
+            localStorage.setItem('user_avatar', meta.avatar)
+          }
+          if (meta.username && meta.username !== currentUser) {
+            setCurrentUser(meta.username)
+            localStorage.setItem('username', meta.username)
+          }
+        }
+      }).catch(() => {})
+    }
+  }, [isLoggedIn, currentUser, userEmail])
 
   useEffect(() => {
     if (showDetailPage && !selectedCompetitor) {
@@ -618,19 +503,30 @@ function App() {
     }
   }, [showDetailPage, selectedCompetitor])
 
-  const handleLogin = (username) => {
+  const handleLogin = (username, email, userId) => {
     setIsLoggedIn(true)
     setCurrentUser(username)
+    if (email) setUserEmail(email)
+    if (userId) {
+      setCurrentUserId(userId)
+      localStorage.setItem('user_id', userId)
+    }
+    setSelectedCategory('产品规划')
   }
 
   const handleLogout = () => {
     localStorage.removeItem('isLoggedIn')
     localStorage.removeItem('username')
+    localStorage.removeItem('email')
     localStorage.removeItem('token')
     localStorage.removeItem('showDetailPage')
     localStorage.removeItem('selectedCompetitor')
     setIsLoggedIn(false)
+    setIsLoginPageVisible(true)
     setCurrentUser('')
+    setUserEmail('')
+    setCurrentUserId('')
+    localStorage.removeItem('user_id')
     setCurrentProductId(null)
     setCurrentProduct(null)
     setUserProducts([])
@@ -644,31 +540,78 @@ function App() {
     setCurrentProduct(product)
     setCurrentProductId(product.id)
     try { localStorage.setItem('last_product_id', String(product.id)) } catch { void 0 }
-    loadCompetitors(product.id)
   }
 
   // 处理添加产品
   const handleAddProduct = async (productData, editId = null) => {
     try {
       if (editId) {
-        alert('暂未实现产品更新，后续由 Supabase 行级安全下完成')
+        showToast('暂未实现产品更新，后续由 Supabase 行级安全下完成', 'warning')
       } else {
-        await apiAddProduct({ name: productData.name, description: productData.description, website: productData.website, logo: productData.logo })
+        setIsCreatingProduct(true)
+        const created = await apiAddProduct({ name: productData.name, description: productData.description, website: productData.website, logo: '' })
+        if (created?.id) {
+          setUserProducts(prev => [created, ...(Array.isArray(prev) ? prev : [])])
+          setCurrentProduct(created)
+          setCurrentProductId(created.id)
+          try { localStorage.setItem('last_product_id', String(created.id)) } catch { void 0 }
+        }
+        showToast('产品创建成功！', 'success')
+        
+        // 上传Logo (如果存在)
+        if (productData.logo && created?.id) {
+          try {
+            const { url } = await uploadProductLogo(productData.logo, created.id)
+            if (url) {
+              await updateProduct(created.id, { logo_url: url })
+            }
+          } catch (e) {
+            console.error('Failed to upload logo during creation:', e)
+            showToast('Logo上传失败，但产品已创建', 'warning')
+          }
+        }
+        
         await loadUserProducts()
-        alert('产品创建成功！')
+        setIsCreatingProduct(false)
       }
     } catch (error) {
       console.error(editId ? '更新产品失败:' : '创建产品失败:', error)
-      alert(editId ? '更新产品失败，请检查网络连接' : '创建产品失败，请检查网络连接')
+      showToast(editId ? '更新产品失败，请检查网络连接' : '创建产品失败，请检查网络连接', 'error')
+      setIsCreatingProduct(false)
+    }
+  }
+
+  // 处理产品更新
+  const handleUpdateProduct = (updatedProduct) => {
+    // 更新 userProducts 列表
+    setUserProducts(prevProducts => 
+      prevProducts.map(p => p.id === updatedProduct.id ? updatedProduct : p)
+    )
+    
+    // 如果更新的是当前选中的产品，更新 currentProduct
+    if (currentProduct?.id === updatedProduct.id) {
+      setCurrentProduct(updatedProduct)
+      // 更新缓存
+      try {
+        const cacheKey = `product_details_cache_${updatedProduct.id}`
+        localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data: updatedProduct }))
+        
+        // 更新列表缓存
+        const uid = currentUserId || (typeof currentUser === 'string' ? currentUser : currentUser?.id)
+        const listCacheKey = uid ? `products_cache_user_${uid}` : 'products_cache'
+        // 由于这里获取不到完整的 user id，我们只更新 currentProduct 和 userProducts 状态
+        // 下次 loadUserProducts 时会覆盖
+      } catch { void 0 }
     }
   }
 
   // 加载用户产品列表
   const loadUserProducts = async () => {
-    if (isLoadingProducts) return
+    if (isLoadingProducts) return []
     setIsLoadingProducts(true)
     try {
       console.time('loadUserProducts')
+      console.log('Starting product data fetch...')
       let products = []
       try {
         const user = await apiGetUser()
@@ -677,202 +620,203 @@ function App() {
         if (cached) {
           const parsed = JSON.parse(cached)
           if (Array.isArray(parsed) && parsed.length > 0) {
+            console.log('Loaded products from cache:', parsed)
             setUserProducts(parsed)
           }
         }
         products = await getProducts()
+        console.log('Fetched product data from API:', products)
         if (Array.isArray(products)) {
           localStorage.setItem(cacheKey, JSON.stringify(products))
         }
-      } catch {
+      } catch (e) {
+        console.warn('Failed to fetch user specific products, falling back to all products', e)
         products = await getProducts()
       }
-      if (products.length > 0) {
+
+      if (Array.isArray(products)) {
         setUserProducts(products)
-        const firstProduct = products[0]
-        setCurrentProduct(firstProduct)
-        setCurrentProductId(firstProduct.id)
-        try { localStorage.setItem('last_product_id', String(firstProduct.id)) } catch { void 0 }
-        loadCompetitors(firstProduct.id)
+        
+        // 如果当前有选中的产品ID但没有详情，尝试从列表中恢复
+        if (currentProductId && !currentProduct) {
+          const found = products.find(p => String(p.id) === String(currentProductId))
+          if (found) setCurrentProduct(found)
+        }
       }
       console.timeEnd('loadUserProducts')
+      return products || []
     } catch (error) {
-      console.error('加载产品列表失败:', error)
+      console.error('Failed to load products:', error)
+      showToast('加载产品列表失败', 'error')
+      return []
     } finally {
       setIsLoadingProducts(false)
     }
   }
 
-  // 加载竞品数据
-  const loadCompetitors = async (productId) => {
-    if (!productId) return
+  // 处理从灵感转化创建的产品
+  const handleProductCreatedFromIdea = async (productId) => {
+    // 强制刷新列表
+    const products = await loadUserProducts()
+    // 查找新产品
+    const newProduct = products.find(p => String(p.id) === String(productId))
     
-    try {
-      setIsLoading(true)
-      const cacheKey = `competitors_cache_product_${productId}`
-      const cached = localStorage.getItem(cacheKey)
-      if (cached) {
-        const parsed = JSON.parse(cached)
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setCompetitors(parsed)
-        }
+    if (newProduct) {
+      handleProductChange(newProduct)
+      setSelectedCategory('产品规划')
+      showToast('已切换到新创建的产品空间', 'success')
+    } else {
+      // 如果列表刷新没找到（可能是异步延迟），尝试手动构建一个临时对象并切换
+      // 或者再次尝试获取
+      console.warn('New product not found in list immediately, trying to fetch directly...')
+      // 这里如果 getProducts 还没包含新数据，可能需要后端确保数据一致性
+      // 暂时假设 loadUserProducts 能获取到
+    }
+  }
+
+  
+
+  const handleUpdateUser = async (userData) => {
+    const updates = {}
+    if (userData.username) {
+      setCurrentUser(userData.username)
+      localStorage.setItem('username', userData.username)
+      updates.username = userData.username
+    }
+    if (userData.avatar) {
+      setUserAvatar(userData.avatar)
+      localStorage.setItem('user_avatar', userData.avatar)
+      updates.avatar = userData.avatar
+    }
+    
+    // Save to backend
+    if (Object.keys(updates).length > 0) {
+      try {
+        await apiUpdateUser(updates)
+      } catch (e) {
+        console.error('Failed to update user profile', e)
       }
-      const data = await apiGetCompetitors(productId)
-      if (Array.isArray(data)) {
-        localStorage.setItem(cacheKey, JSON.stringify(data))
-      }
-      setCompetitors(data)
-    } catch (error) {
-      console.error('加载竞品数据失败:', error)
-    } finally {
-      setIsLoading(false)
     }
   }
 
-  const handleAddCompetitor = async (newCompetitor) => {
-    console.log('handleAddCompetitor被调用，数据:', newCompetitor)
-    if (!currentProductId) {
-      alert('请先选择一个产品')
-      return
-    }
-
-    try {
-      setIsLoading(true)
-      await apiAddCompetitor(currentProductId, newCompetitor)
-      await loadCompetitors(currentProductId)
-      setIsAddModalOpen(false)
-      alert('竞品添加成功！')
-    } catch (error) {
-      console.error('添加竞品失败:', error)
-      alert('添加竞品失败，请检查网络连接')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleDeleteCompetitor = (id) => {
-    setCompetitors(competitors.filter(comp => comp.id !== id))
-  }
-
-  const handleViewCompetitorDetail = (competitor) => {
-    setSelectedCompetitor(competitor)
-    setShowDetailPage(true)
-    // 保存状态到localStorage
-    localStorage.setItem('selectedCompetitor', JSON.stringify(competitor))
-    localStorage.setItem('showDetailPage', 'true')
-  }
-
-  const handleBackToList = () => {
-    setShowDetailPage(false)
-    setSelectedCompetitor(null)
-    // 清除localStorage中的状态
-    localStorage.removeItem('showDetailPage')
-    localStorage.removeItem('selectedCompetitor')
+  const handleCreatePlanFromTrend = (planData) => {
+    setTrendPlanData(planData)
+    setSelectedCategory('内容规划')
   }
 
   const normalizedSelectedCategory = (selectedCategory || '').trim()
-  const filteredCompetitors = competitors.filter(competitor => {
-    const matchesSearch = (competitor.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (competitor.description || '').toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesCategory = normalizedSelectedCategory === '全部' || normalizedSelectedCategory === '竞品管理' || competitor.category === normalizedSelectedCategory
-    console.log('Filtering competitor:', competitor.name, 'matchesSearch:', matchesSearch, 'matchesCategory:', matchesCategory, 'selectedCategory:', normalizedSelectedCategory)
-    return matchesSearch && matchesCategory
-  })
   
-  console.log('Filtered competitors:', filteredCompetitors.length, 'out of', competitors.length)
 
-  if (!isLoggedIn) {
-    return <LoginPage onLogin={handleLogin} />
-  }
-
-  // 如果URL中有邀请token，显示邀请页面
-  if (invitationToken) {
+  // 如果URL中有邀请token且已登录，显示邀请页面确认加入
+  if (invitationToken && isLoggedIn) {
     return <InvitationPage token={invitationToken} onLogin={handleLogin} />
   }
 
-  // 如果显示详情页面，则渲染详情页面
-  if (showDetailPage && selectedCompetitor) {
-    return (
-      <NewCompetitorDetailPage 
-        competitor={selectedCompetitor}
-        onBack={handleBackToList}
-        searchTerm={searchTerm}
-        setSearchTerm={setSearchTerm}
-        selectedCategory={selectedCategory}
-        setSelectedCategory={setSelectedCategory}
-        currentUser={currentUser}
-        onLogout={handleLogout}
-        currentProduct={currentProduct}
-        userProducts={userProducts}
-        onProductChange={handleProductChange}
-        onAddProduct={handleAddProduct}
-      />
-    )
+  // 公开分享灵感路由 - 拦截登录检查
+  if (sharedIdeaId) {
+    return <SharedIdeaPage ideaId={sharedIdeaId} />
   }
+
+  if (!isLoggedIn) {
+    if (isLoginPageVisible) {
+      return <LoginPage onLogin={handleLogin} onBack={() => setIsLoginPageVisible(false)} />
+    }
+    return <LandingPage onLoginClick={() => setIsLoginPageVisible(true)} />
+  }
+
+  
 
   return (
     <div className="flex h-screen bg-gray-50">
-      <Sidebar 
-        searchTerm={searchTerm}
-        setSearchTerm={setSearchTerm}
-        selectedCategory={selectedCategory}
-        setSelectedCategory={setSelectedCategory}
-        onAddCompetitor={() => setIsAddModalOpen(true)}
-        currentUser={currentUser}
-        onLogout={handleLogout}
-        currentProduct={currentProduct}
-        userProducts={userProducts}
-        onProductChange={handleProductChange}
-        onAddProduct={handleAddProduct}
-        isLoadingProducts={isLoadingProducts}
-      />
+      {normalizedSelectedCategory !== '灵感工作台' && (
+        <Sidebar 
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          selectedCategory={selectedCategory}
+          setSelectedCategory={setSelectedCategory}
+          
+          currentUser={currentUser}
+          userAvatar={userAvatar}
+          onLogout={handleLogout}
+          currentProduct={currentProduct}
+          userProducts={userProducts}
+          onProductChange={handleProductChange}
+          onAddProduct={handleAddProduct}
+          isLoadingProducts={isLoadingProducts}
+          onRefresh={loadUserProducts}
+        />
+      )}
       
-      <main className={`${normalizedSelectedCategory === '产品路线图' ? 'flex-1 bg-gray-50 p-4 overflow-y-auto' : 'flex-1 bg-gray-50 p-4 overflow-hidden'}`}>
-        <div className={`${normalizedSelectedCategory === '产品路线图' ? 'bg-white rounded-xl shadow-sm min-h-full overflow-visible' : 'bg-white rounded-xl shadow-sm h-full overflow-hidden'}`}>
-        {normalizedSelectedCategory === '竞品管理' ? (
-          <CompetitorList 
-            competitors={filteredCompetitors}
-            currentProduct={currentProduct}
-            searchTerm={searchTerm}
-            onSearchChange={setSearchTerm}
-            onViewDetail={handleViewCompetitorDetail}
-            onAddCompetitor={() => setIsAddModalOpen(true)}
-          />
-        ) : normalizedSelectedCategory === '产品路线图' ? (
-          <RoadmapPage currentProduct={currentProduct} />
-        ) : normalizedSelectedCategory === '团队成员' ? (
-          <TeamMemberPage currentProduct={currentProduct} />
+      <main className={`flex-1 ${normalizedSelectedCategory === '灵感工作台' ? 'bg-gray-100' : 'bg-gray-50'} p-4 overflow-hidden`}>
+        <div className={'bg-white rounded-xl shadow-sm h-full overflow-hidden'}>
+        {normalizedSelectedCategory === '系统设置' ? (
+          <SettingsPage currentProduct={currentProduct} />
         ) : normalizedSelectedCategory === '内容规划' ? (
-          <ContentPlanningPage currentProduct={currentProduct} />
+          <ContentPlanningPage 
+            currentProduct={currentProduct} 
+            initialPlanData={trendPlanData}
+            onPlanCreated={() => setTrendPlanData(null)}
+          />
+        ) : normalizedSelectedCategory === '灵感工作台' ? (
+          <IdeaIncubator 
+            currentUser={{ 
+              id: currentUserId || currentUser, 
+              name: currentUser,
+              email: userEmail,
+              user_metadata: { username: currentUser }
+            }} 
+            onExit={() => setSelectedCategory('产品规划')}
+            onProductCreated={handleProductCreatedFromIdea}
+          />
+        ) : normalizedSelectedCategory === '热点雷达' ? (
+          <TrendRadarPage 
+            productContext={currentProduct ? {
+              name: currentProduct.name,
+              positioning: currentProduct.positioning || currentProduct.description || '暂无定位',
+              target_audience: currentProduct.target_audience || '暂无受众'
+            } : null}
+            onCreatePlan={handleCreatePlanFromTrend}
+          />
+        ) : normalizedSelectedCategory === '智能选题' ? (
+          <SmartTopicWorkbench 
+            currentUser={{ id: currentUserId }} 
+            productContext={currentProduct}
+            onCreatePlan={handleCreatePlanFromTrend}
+          />
+        ) : normalizedSelectedCategory === '选题会议室' ? (
+          <IdeationConference 
+            currentUser={{ id: currentUserId }}
+            currentProduct={currentProduct}
+          />
+        ) : normalizedSelectedCategory === '人设实验室' ? (
+          <PersonaLab 
+            currentUser={{ id: currentUserId }}
+          />
         ) : normalizedSelectedCategory === '平台Logo测试' ? (
           <PlatformLogoTest />
-        ) : (normalizedSelectedCategory === '产品资料管理' || normalizedSelectedCategory === '产品资料') ? (
-          <ProductDataManager currentProduct={currentProduct} />
+        ) : normalizedSelectedCategory === '个人信息' ? (
+          <UserProfilePage currentUser={currentUser} email={userEmail} onUpdateUser={handleUpdateUser} />
+        ) : (normalizedSelectedCategory === '产品规划' || normalizedSelectedCategory === '产品资料管理' || normalizedSelectedCategory === '产品资料') ? (
+          <ProductDataManager currentProduct={currentProduct} onUpdateProduct={handleUpdateProduct} />
         ) : (
-          <CompetitorList 
-            competitors={filteredCompetitors}
-            currentProduct={currentProduct}
-            searchTerm={searchTerm}
-            onSearchChange={setSearchTerm}
-            onViewDetail={handleViewCompetitorDetail}
-            onAddCompetitor={() => setIsAddModalOpen(true)}
-          />
+          <ProductDataManager currentProduct={currentProduct} onUpdateProduct={handleUpdateProduct} />
         )}
         </div>
       </main>
 
-      {isAddModalOpen && (
-        <AddCompetitorModal 
-          onClose={() => setIsAddModalOpen(false)}
-          onAdd={handleAddCompetitor}
-        />
-      )}
-
-      {selectedCompetitor && (
-        <CompetitorDetailModal 
-          competitor={selectedCompetitor}
-          onClose={() => setSelectedCompetitor(null)}
-        />
+      
+      {isCreatingProduct && (
+        <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl px-6 py-4 flex items-center space-x-3">
+            <div className="w-5 h-5 animate-spin">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" stroke="#6366F1" strokeWidth="4" fill="none" opacity="0.2"/>
+                <path d="M22 12a10 10 0 0 0-10-10" stroke="#6366F1" strokeWidth="4" fill="none"/>
+              </svg>
+            </div>
+            <span className="text-sm text-gray-700">正在创建产品...</span>
+          </div>
+        </div>
       )}
     </div>
   )

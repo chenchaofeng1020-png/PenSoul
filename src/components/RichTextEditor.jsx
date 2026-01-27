@@ -13,9 +13,7 @@ import {
   Code, 
   Quote, 
   Undo, 
-  Redo,
-  Type,
-  Palette
+  Redo
 } from 'lucide-react'
 
 const RichTextEditor = ({ 
@@ -24,7 +22,8 @@ const RichTextEditor = ({
   onPreview,
   onChange,
   placeholder = '开始编写分析内容...',
-  height = '400px'
+  height = '400px',
+  className = ''
 }) => {
   const [content, setContent] = useState(initialContent)
   const [showImageUpload, setShowImageUpload] = useState(false)
@@ -43,6 +42,17 @@ const RichTextEditor = ({
     initializeEditor()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // 监听 initialContent 变化，以便外部（如AI助手）更新内容时同步到编辑器
+  useEffect(() => {
+    // 只有当传入的新内容与当前内容不一致时才更新，避免光标跳动
+    if (initialContent !== undefined && initialContent !== content) {
+      setContent(initialContent)
+      if (editorRef.current && editorRef.current.innerHTML !== initialContent) {
+        editorRef.current.innerHTML = initialContent
+      }
+    }
+  }, [initialContent])
 
   // 格式化命令
   const formatText = (command, value = null) => {
@@ -102,9 +112,9 @@ const RichTextEditor = ({
   )
 
   return (
-    <div className="border border-gray-200 rounded-lg bg-white">
+    <div className={`border border-gray-200 rounded-lg bg-white flex flex-col ${className}`} style={{ height: className ? undefined : height }}>
       {/* 工具栏 */}
-      <div className="border-b border-gray-200 p-3">
+      <div className="border-b border-gray-200 p-3 flex-shrink-0">
         <div className="flex flex-wrap items-center gap-1">
           {/* 文本格式 */}
           <div className="flex items-center gap-1 mr-3">
@@ -233,13 +243,13 @@ const RichTextEditor = ({
       </div>
 
       {/* 编辑器内容区域 */}
-      <div className="relative">
+      <div className="relative flex-1 flex flex-col min-h-0">
         {/* 编辑模式 */}
         <div
           ref={editorRef}
           contentEditable
-          className="p-4 focus:outline-none min-h-[400px] overflow-y-auto rich-text-editor"
-          style={{ height }}
+          className="p-4 focus:outline-none overflow-y-auto rich-text-editor flex-1"
+          style={{ height: '100%' }}
           onInput={(e) => {
             setContent(e.target.innerHTML)
             if (onChange) {
@@ -294,7 +304,7 @@ const RichTextEditor = ({
       </div>
 
       {/* 底部状态栏 */}
-      <div className="border-t border-gray-200 px-4 py-2 bg-gray-50 text-xs text-gray-500 flex justify-between items-center">
+      <div className="border-t border-gray-200 px-4 py-2 bg-gray-50 text-xs text-gray-500 flex justify-between items-center flex-shrink-0">
         <div className="flex items-center space-x-4">
           <span>字符数: {content.replace(/<[^>]*>/g, '').length}</span>
           <span>模式: 编辑</span>

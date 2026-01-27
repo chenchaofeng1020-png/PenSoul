@@ -22,7 +22,9 @@ export const PLATFORMS = [
   { id: '51cto', name: '51CTO', category: 'tech_community', abbr: '51', color: '#d81921', hasLogo: false },
   { id: 'v2ex', name: 'V2EX', category: 'forum', abbr: 'V2', color: '#778087', hasLogo: false },
   { id: 'tieba', name: '贴吧', category: 'forum', abbr: 'TB', color: '#2e6cf6', hasLogo: false },
-  { id: 'douban_group', name: '豆瓣小组', category: 'forum', abbr: 'DB', color: '#2aa515', hasLogo: false }
+  { id: 'douban_group', name: '豆瓣小组', category: 'forum', abbr: 'DB', color: '#2aa515', hasLogo: false },
+  { id: 'linkedin', name: 'LinkedIn', category: 'social', abbr: 'LI', color: '#0077b5', hasLogo: true },
+  { id: 'twitter', name: 'Twitter', category: 'social', abbr: 'TW', color: '#1da1f2', hasLogo: true }
 ]
 
 export const PLATFORM_MAP = PLATFORMS.reduce((acc, p) => { acc[p.id] = p; return acc }, {})

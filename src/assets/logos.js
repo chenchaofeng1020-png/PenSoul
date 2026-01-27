@@ -2,18 +2,19 @@
 export const productDuckLogo = `data:image/svg+xml;base64,${btoa(`
   <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
     <defs>
-      <linearGradient id="duckGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" style="stop-color:#FFD700;stop-opacity:1" />
-        <stop offset="100%" style="stop-color:#FFA500;stop-opacity:1" />
+      <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#2E7CF6" />
+        <stop offset="100%" stop-color="#6AA7FF" />
       </linearGradient>
     </defs>
-    <rect width="100" height="100" fill="url(#duckGradient)" rx="20"/>
-    <ellipse cx="50" cy="65" rx="25" ry="20" fill="#FFFFFF"/>
-    <circle cx="50" cy="35" r="18" fill="#FFFFFF"/>
-    <ellipse cx="58" cy="35" rx="8" ry="4" fill="#FF6B35"/>
-    <circle cx="45" cy="30" r="3" fill="#333333"/>
-    <rect x="35" y="50" width="30" height="8" fill="#4A90E2" rx="4"/>
-    <text x="50" y="56" font-family="Arial, sans-serif" font-size="6" fill="white" text-anchor="middle">PRODUCT</text>
+    <rect width="100" height="100" rx="20" fill="url(#bg)" />
+    <ellipse cx="50" cy="68" rx="26" ry="18" fill="#FFFFFF" />
+    <circle cx="44" cy="42" r="16" fill="#FFFFFF" />
+    <ellipse cx="54" cy="42" rx="7" ry="4" fill="#FF8A00" />
+    <circle cx="38" cy="38" r="3" fill="#1F2937" />
+    <rect x="68" y="64" width="4" height="10" rx="1" fill="#1E40AF" opacity="0.85" />
+    <rect x="74" y="60" width="4" height="14" rx="1" fill="#2563EB" opacity="0.85" />
+    <rect x="80" y="66" width="4" height="8" rx="1" fill="#60A5FA" opacity="0.85" />
   </svg>
 `)}`;
 

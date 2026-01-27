@@ -66,12 +66,12 @@
                     localStorage.setItem('isLoggedIn', 'true');
                     localStorage.setItem('username', 'testauth');
                     
-                    resultDiv.innerHTML = `<div class="success">Login successful!</div><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                    resultDiv.innerHTML = `<div class="success">登录成功！</div><pre>${JSON.stringify(data, null, 2)}</pre>`;
                 } else {
-                    resultDiv.innerHTML = `<div class="error">Login failed!</div><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                    resultDiv.innerHTML = `<div class="error">登录失败！</div><pre>${JSON.stringify(data, null, 2)}</pre>`;
                 }
             } catch (error) {
-                resultDiv.innerHTML = `<div class="error">Login error: ${error.message}</div>`;
+                resultDiv.innerHTML = `<div class="error">登录错误：${error.message}</div>`;
             }
         }
         

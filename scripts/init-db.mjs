@@ -25,9 +25,9 @@ if (!dbUrl) {
   process.exit(1)
 }
 
-const sqlPath = path.join(process.cwd(), 'supabase', 'init.sql')
+const sqlPath = path.join(process.cwd(), 'supabase', 'migrations', 'create_agents_table.sql')
 if (!fs.existsSync(sqlPath)) {
-  console.error('缺少 supabase/init.sql 文件')
+  console.error('缺少 create_agents_table.sql 文件')
   process.exit(1)
 }
 
@@ -38,9 +38,9 @@ async function main() {
   try {
     await client.connect()
     await client.query(sql)
-    console.log('数据库初始化完成')
+    console.log('Agents 表初始化完成')
   } catch (e) {
-    console.error('数据库初始化失败:', e.message)
+    console.error('Agents 表初始化失败:', e.message)
     process.exit(1)
   } finally {
     await client.end()

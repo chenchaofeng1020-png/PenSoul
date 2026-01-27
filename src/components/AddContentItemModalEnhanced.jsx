@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
-import { X, Clock, ChevronDown } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import { X, Clock, ChevronDown, Check } from 'lucide-react'
 import { PLATFORMS } from '../constants/platforms'
 
 // 预设内容主题数据（移除以统一编辑与新建字段）
@@ -30,6 +31,103 @@ const PLATFORM_TIMING = {
     { timeSlot: '12:00-14:00', dayType: 'weekday', description: '午休刷微博时间' },
     { timeSlot: '20:00-23:00', dayType: 'all', description: '晚间社交活跃时间' }
   ]
+}
+
+function PlatformSelect({ value, onChange }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const buttonRef = useRef(null)
+  const [dropdownStyle, setDropdownStyle] = useState({})
+
+  // 更新下拉菜单位置
+  const updatePosition = () => {
+    if (buttonRef.current && isOpen) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      setDropdownStyle({
+        position: 'fixed',
+        top: `${rect.bottom + 4}px`,
+        left: `${rect.left}px`,
+        width: `${rect.width}px`,
+        zIndex: 9999
+      })
+    }
+  }
+
+  useEffect(() => {
+    if (isOpen) {
+      updatePosition()
+      window.addEventListener('scroll', updatePosition, true)
+      window.addEventListener('resize', updatePosition)
+    }
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true)
+      window.removeEventListener('resize', updatePosition)
+    }
+  }, [isOpen])
+
+  // 点击外部关闭逻辑
+  useEffect(() => {
+    if (!isOpen) return
+    function handleClickOutside(event) {
+      // 如果点击的是按钮本身，不处理（由按钮的onClick处理）
+      if (buttonRef.current && buttonRef.current.contains(event.target)) {
+        return
+      }
+      // 如果点击的是下拉菜单内部（虽然是在Portal中，但事件冒泡机制不同，这里直接通过全局关闭）
+      // 实际上由于Portal渲染在body，ref判断会比较麻烦，这里简单处理：
+      // 只要点击发生，且不是在按钮上，就尝试关闭。
+      // 为了防止误触下拉菜单内部项导致关闭（虽然内部项有自己的onClick），
+      // 我们在下拉菜单的最外层div阻止冒泡即可。
+      setIsOpen(false)
+    }
+    // 使用capture阶段捕获，或者在Portal内部阻止冒泡
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [isOpen])
+
+  const selectedPlatform = PLATFORMS.find(p => p.id === value)
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between border border-gray-100 rounded-lg px-3 py-2 bg-white hover:bg-gray-50 transition-colors"
+      >
+        <span className={selectedPlatform ? 'text-gray-900' : 'text-gray-500'}>
+          {selectedPlatform ? selectedPlatform.name : '选择平台'}
+        </span>
+        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isOpen && createPortal(
+        <div 
+          style={dropdownStyle}
+          className="bg-white border border-gray-100 rounded-lg shadow-xl max-h-60 overflow-y-auto py-1 animate-in fade-in zoom-in-95 duration-100"
+          onMouseDown={(e) => e.stopPropagation()} // 阻止点击菜单内部触发外部关闭
+        >
+          {PLATFORMS.map(p => (
+            <div
+              key={p.id}
+              onClick={() => {
+                onChange(p.id)
+                setIsOpen(false)
+              }}
+              className={`flex items-center justify-between px-3 py-2 cursor-pointer text-sm ${
+                value === p.id ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <span>{p.name}</span>
+              {value === p.id && <Check className="w-4 h-4" />}
+            </div>
+          ))}
+        </div>,
+        document.body
+      )}
+    </>
+  )
 }
 
 export default function AddContentItemModalEnhanced({ onClose, onSubmit, currentProduct, mode = 'create', initialItem = null, defaultScheduleAt = '' }){
@@ -84,7 +182,7 @@ export default function AddContentItemModalEnhanced({ onClose, onSubmit, current
     targetDate.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0)
 
     const formattedDateTime = new Date(targetDate.getTime() - targetDate.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
-    setForm({ ...form, schedule_at: formattedDateTime })
+    setForm(f => ({ ...f, schedule_at: formattedDateTime }))
     setShowTimeSuggestions(false)
   }
 
@@ -116,7 +214,7 @@ export default function AddContentItemModalEnhanced({ onClose, onSubmit, current
 
   // 预填充编辑模式表单或来自日历的默认日期
   useEffect(() => {
-    if (mode === 'edit' && initialItem) {
+    if (initialItem) {
       const toInput = (ts) => {
         if (!ts) return ''
         const d = new Date(ts)
@@ -128,12 +226,14 @@ export default function AddContentItemModalEnhanced({ onClose, onSubmit, current
         return `${y}-${m}-${day}T${hh}:${mm}`
       }
       setForm({
-        platform: normalizePlatform(initialItem.platform),
+        platform: normalizePlatform(initialItem.platform) || '',
         topic_title: (initialItem.topic_title || initialItem.title || ''),
-        schedule_at: toInput(initialItem.schedule_at),
+        schedule_at: initialItem.schedule_at ? toInput(initialItem.schedule_at) : (form.schedule_at || ''),
         status: initialItem.status || 'not_started',
       })
-    } else if (defaultScheduleAt && !form.schedule_at) {
+    } 
+    
+    if (defaultScheduleAt && !form.schedule_at && !initialItem?.schedule_at) {
       // defaultScheduleAt: 形如 YYYY-MM-DD
       const [y, m, d] = defaultScheduleAt.split('-').map(n => parseInt(n, 10))
       const base = new Date(y, (m - 1), d)
@@ -144,20 +244,20 @@ export default function AddContentItemModalEnhanced({ onClose, onSubmit, current
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <div className="bg-white rounded-xl w-full max-w-2xl flex flex-col max-h-[90vh]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
           <div className="text-lg font-semibold">{mode==='edit' ? '编辑选题' : '新建计划'}</div>
           <button onClick={isSubmitting ? undefined : onClose} disabled={isSubmitting} className="p-2 hover:bg-gray-100 rounded-lg disabled:opacity-50"><X className="w-4 h-4"/></button>
         </div>
-        <div className="flex-1 overflow-y-auto px-6">
+        <div className="flex-1 overflow-y-auto px-6 py-4 overflow-visible">
         
         
-        <div className="space-y-4 my-4">
+        <div className="space-y-4">
           <div>
             <label className="text-sm text-gray-700">选题内容</label>
             <input 
               value={form.topic_title} 
-              onChange={(e)=>setForm({...form, topic_title: e.target.value})} 
+              onChange={(e)=>setForm(f=>({ ...f, topic_title: e.target.value }))} 
               placeholder={'输入选题方向/主题'}
               className="w-full border border-gray-100 rounded-lg px-3 py-2"
             />
@@ -167,28 +267,20 @@ export default function AddContentItemModalEnhanced({ onClose, onSubmit, current
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-sm text-gray-700 mb-1 block">平台</label>
-              <div className="relative">
-                <select 
-                  value={form.platform} 
-                  onChange={(e) => {
-                    setForm({...form, platform: e.target.value})
-                    if (e.target.value) {
-                      const timeSuggestions = getTimeSuggestions(e.target.value)
-                      // 自动填充推荐时间
-                      if (timeSuggestions.length > 0) {
-                        const firstSuggestion = timeSuggestions[0]
-                        applyTimeSuggestion(firstSuggestion.timeSlot, firstSuggestion.dayType)
-                      }
+              <PlatformSelect 
+                value={form.platform} 
+                onChange={(newPlatformId) => {
+                  setForm(f => ({ ...f, platform: newPlatformId }))
+                  if (newPlatformId) {
+                    const timeSuggestions = getTimeSuggestions(newPlatformId)
+                    // 自动填充推荐时间
+                    if (timeSuggestions.length > 0) {
+                      const firstSuggestion = timeSuggestions[0]
+                      applyTimeSuggestion(firstSuggestion.timeSlot, firstSuggestion.dayType)
                     }
-                  }} 
-                  className="w-full border border-gray-100 rounded-lg px-3 py-2"
-                >
-                  <option value="">选择平台</option>
-                  {PLATFORMS.map(p=> (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-              </div>
+                  }
+                }}
+              />
             </div>
             
             <div>
@@ -207,7 +299,7 @@ export default function AddContentItemModalEnhanced({ onClose, onSubmit, current
               <input 
                 type="datetime-local" 
                 value={form.schedule_at} 
-                onChange={(e)=>setForm({...form, schedule_at: e.target.value})} 
+                onChange={(e)=>setForm(f => ({ ...f, schedule_at: e.target.value }))} 
                 className={`w-full border rounded-lg px-3 py-2 ${
                   scheduleConflicts.length > 0 ? 'border-red-200 bg-red-50' : 'border-gray-100'
                 }`}
@@ -259,7 +351,7 @@ export default function AddContentItemModalEnhanced({ onClose, onSubmit, current
             <label className="text-sm text-gray-700 mb-1 block">计划状态</label>
             <select 
               value={form.status}
-              onChange={(e)=> setForm({ ...form, status: e.target.value })}
+              onChange={(e)=> setForm(f => ({ ...f, status: e.target.value }))}
               className="w-full border border-gray-100 rounded-lg px-3 py-2"
             >
               <option value="not_started">未开始</option>
@@ -286,6 +378,10 @@ export default function AddContentItemModalEnhanced({ onClose, onSubmit, current
               if (isSubmitting) return
               setIsSubmitting(true)
               try {
+                if (!form.platform) {
+                  alert('请选择平台')
+                  return
+                }
                 if (onSubmit) await onSubmit(form)
               } finally {
                 setIsSubmitting(false)

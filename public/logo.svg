@@ -1,0 +1,29 @@
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="grad" x1="0" y1="0" x2="200" y2="200" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6366F1"/>
+      <stop offset="1" stop-color="#A855F7"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+  
+  <rect width="200" height="200" rx="50" fill="url(#grad)"/>
+  
+  <!-- Duck Body -->
+  <path d="M145 95C145 81.1929 133.807 70 120 70H105C96.7157 70 90 76.7157 90 85V100C90 127.614 67.6142 150 40 150H120C147.614 150 170 127.614 170 100V95H145Z" fill="white" fill-opacity="0.2"/>
+  
+  <!-- Duck Head & Neck -->
+  <path d="M100 60C100 82.0914 82.0914 100 60 100C37.9086 100 20 82.0914 20 60C20 37.9086 37.9086 20 60 20C82.0914 20 100 37.9086 100 60Z" fill="white"/>
+  
+  <!-- Beak -->
+  <path d="M100 60H130C135.523 60 140 64.4772 140 70C140 75.5228 135.523 80 130 80H98" fill="#FFB020"/>
+  
+  <!-- Eye -->
+  <circle cx="60" cy="50" r="8" fill="#1F2937"/>
+  
+  <!-- Body/Wing Abstract -->
+  <path d="M60 100C60 127.614 82.3858 150 110 150H120C136.569 150 150 136.569 150 120C150 103.431 136.569 90 120 90H100V100Z" fill="white"/>
+
+</svg>

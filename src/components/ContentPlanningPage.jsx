@@ -1,24 +1,28 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CalendarDays, Plus, ChevronLeft, ChevronRight, ChevronDown, Edit, FileText, Lightbulb, Info, Trash2 } from 'lucide-react'
-import { getContentItems, createContentItem, updateContentItem, deleteContentItem } from '../services/api'
+import { CalendarDays, Plus, ChevronLeft, ChevronRight, ChevronDown, Edit, FileText, Trash2 } from 'lucide-react'
+import { getContentItems, createContentItem, updateContentItem, deleteContentItem, getContentItem } from '../services/api'
+import { useUI } from '../context/UIContext'
 import { PLATFORMS, PLATFORM_MAP } from '../constants/platforms'
 import PlatformBadge from './PlatformBadge'
 import AddContentItemModalEnhanced from './AddContentItemModalEnhanced'
 import RichTextEditor from './RichTextEditor'
+import AiTopicGenerator from './AiTopicGenerator'
+import AiDraftAssistant from './AiDraftAssistant'
 
 const platforms = PLATFORMS
 
-export default function ContentPlanningPage({ currentProduct }) {
+export default function ContentPlanningPage({ currentProduct, initialPlanData, onPlanCreated }) {
+  const { confirm, showToast } = useUI()
   const [view, _setView] = useState('calendar')
   const [items, setItems] = useState([])
   const [platform, setPlatform] = useState('all')
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [preFillDate, setPreFillDate] = useState(null)
+  const [preFillItem, setPreFillItem] = useState(null) // Data from TrendRadar
   const [currentMonth, setCurrentMonth] = useState(() => {
     const d = new Date()
     return new Date(d.getFullYear(), d.getMonth(), 1)
   })
-  const [hoverPreview, setHoverPreview] = useState({ key: null, items: [] })
   const [selectedDate, setSelectedDate] = useState(null)
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [editItem, setEditItem] = useState(null)
@@ -28,35 +32,50 @@ export default function ContentPlanningPage({ currentProduct }) {
   const [composeItem, setComposeItem] = useState(null)
   const [composeTitle, setComposeTitle] = useState('')
   const [composeBody, setComposeBody] = useState('')
-  const [composeIndustry, setComposeIndustry] = useState('')
-  const CONTENT_THEMES = {
-    'beauty': [
-      { id: 1, title: '产品试用分享', description: '真实体验产品效果，适合视觉化展示' },
-      { id: 2, title: '化妆教程步骤', description: '详细的化妆步骤教学，适合长图文' },
-      { id: 3, title: '成分科普解析', description: '专业成分分析，适合深度内容' }
-    ],
-    'saas': [
-      { id: 5, title: '产品功能更新', description: '新功能介绍和使用说明' },
-      { id: 6, title: '客户成功案例', description: '客户使用效果和反馈分享' },
-      { id: 7, title: '行业趋势解读', description: '行业分析和趋势预测' }
-    ],
-    'food': [
-      { id: 9, title: '菜品制作过程', description: '美食制作过程展示' },
-      { id: 10, title: '店铺环境展示', description: '餐厅环境和氛围展示' },
-      { id: 11, title: '顾客用餐反馈', description: '顾客真实用餐体验和评价' }
-    ]
-  }
-  const PLATFORM_TIPS = {
-    'wechat_mp': '深度文章，图文为主',
-    'xiaohongshu': '图文与短视频，偏种草风格',
-    'douyin': '短视频为主，节奏更快',
-    'weibo': '热点与短文，互动性强'
-  }
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
-  function openCompose(it){
+  useEffect(() => {
+    if (initialPlanData) {
+      // Convert initialPlanData to a format suitable for the modal
+      const today = new Date()
+      const formattedDate = formatDate(today)
+      setPreFillDate(formattedDate)
+      setPreFillItem({
+        topic_title: initialPlanData.title,
+        core_view: initialPlanData.core_view,
+        outline: typeof initialPlanData.outline === 'string' 
+            ? initialPlanData.outline 
+            : JSON.stringify(initialPlanData.outline),
+        platform: '', // Let user choose, or could infer
+        status: 'not_started'
+      })
+      setIsAddOpen(true)
+    }
+  }, [initialPlanData])
+
+  async function openCompose(it){
     setComposeItem(it)
     setComposeTitle(it.title || '')
-    setComposeBody(it.body || '')
+    
+    if (it.body !== undefined) {
+      setComposeBody(it.body || '')
+    } else {
+      setComposeBody('')
+      try {
+        const fullItem = await getContentItem(it.id)
+        if (fullItem) {
+          setComposeItem(fullItem)
+          setComposeBody(fullItem.body || '')
+          // 更新列表中的数据，避免下次重新加载
+          setItems(prev => {
+            if (!Array.isArray(prev)) return prev
+            return prev.map(x => x.id === it.id ? fullItem : x)
+          })
+        }
+      } catch (e) {
+        console.error('Failed to load content body', e)
+      }
+    }
     setIsComposeOpen(true)
   }
 
@@ -65,15 +84,14 @@ export default function ContentPlanningPage({ currentProduct }) {
     setComposeItem(null)
     setComposeTitle('')
     setComposeBody('')
-    setComposeIndustry('')
   }
 
   async function handleDeleteContentItem(it){
     if (!it?.id) return
-    const ok = window.confirm('确认删除该内容计划？')
-    if (!ok) return
+    if (!await confirm({ title: '删除内容计划', message: '确认删除该内容计划？' })) return
     try {
       await deleteContentItem(it.id)
+      showToast('删除成功', 'success')
       setItems(prev => {
         const base = Array.isArray(prev) ? prev.slice() : []
         const next = base.filter(x => x.id !== it.id)
@@ -94,7 +112,7 @@ export default function ContentPlanningPage({ currentProduct }) {
         }
       } catch { void 0 }
     } catch (e) {
-      alert('删除失败，请稍后重试')
+      showToast('删除失败，请稍后重试', 'error')
     }
   }
 
@@ -148,7 +166,7 @@ export default function ContentPlanningPage({ currentProduct }) {
             }
           }
         } catch { void 0 }
-        const res = await getContentItems(currentProduct.id, { platform: platform === 'all' ? null : platform, from, to })
+        const res = await getContentItems(currentProduct.id, { platform: platform === 'all' ? null : platform, from, to, minimal: true })
         setItems(res)
         setHasLoaded(true)
         try {
@@ -159,7 +177,18 @@ export default function ContentPlanningPage({ currentProduct }) {
       }
     }
     load()
-  }, [currentProduct?.id, platform, currentMonth])
+  }, [currentProduct?.id, platform, currentMonth, refreshTrigger])
+  useEffect(() => {
+    if (!selectedDate) return
+    const handler = (e) => {
+      if (e.key === 'Escape') setSelectedDate(null)
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [selectedDate?.date])
+  useEffect(() => {
+    setSelectedDate(null)
+  }, [platform, currentMonth])
 
   const filtered = items
 
@@ -169,7 +198,7 @@ export default function ContentPlanningPage({ currentProduct }) {
 
   return (
     <div className="bg-white rounded-xl shadow-sm h-full flex flex-col overflow-hidden">
-      <div className="flex-shrink-0 border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+      <div className="flex-shrink-0 border-b border-gray-200 px-6 h-16 flex items-center justify-between">
         {isComposeOpen ? (
           <>
             <div className="flex items-center">
@@ -186,9 +215,10 @@ export default function ContentPlanningPage({ currentProduct }) {
         ) : (
           <>
             <div className="flex items-center">
-              <div className="text-lg font-semibold text-gray-900">内容日历</div>
+              <div className="text-lg font-semibold text-gray-900">内容规划</div>
             </div>
-            <div className="flex items-center">
+            <div className="flex items-center gap-3">
+              <AiTopicGenerator currentProduct={currentProduct} onContentCreated={() => setRefreshTrigger(t => t + 1)} />
               <button onClick={()=>setIsAddOpen(true)} className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700">
                 <Plus className="w-3 h-3" />
                 <span className="text-sm">新建计划</span>
@@ -198,67 +228,41 @@ export default function ContentPlanningPage({ currentProduct }) {
         )}
       </div>
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className={`flex-1 p-6 hide-scrollbar ${isComposeOpen ? 'overflow-hidden flex flex-col' : 'overflow-auto'}`}>
         {isComposeOpen ? (
-          <div className="space-y-6">
-            <div className="grid grid-cols-3 gap-6">
-              <div className="col-span-2 space-y-4">
-                <div>
+          <div className="flex flex-col gap-6 h-full">
+            <div className="grid grid-cols-3 gap-6 h-full min-h-0">
+              <div className="col-span-2 flex flex-col gap-4 h-full min-h-0">
+                <div className="flex-shrink-0">
                   <label className="block text-sm font-medium text-gray-700 mb-2">标题</label>
                   <input value={composeTitle} onChange={(e)=>setComposeTitle(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="输入内容标题" />
                 </div>
-                <div>
+                <div className="flex-1 flex flex-col min-h-0">
                   <label className="block text-sm font-medium text-gray-700 mb-2">正文</label>
-                  <RichTextEditor initialContent={composeBody} onChange={setComposeBody} height="520px" />
+                  <RichTextEditor initialContent={composeBody} onChange={setComposeBody} className="flex-1 flex flex-col min-h-0" height="100%" />
                 </div>
               </div>
-              <div className="md:sticky top-4">
-                <div className="rounded-xl p-4 bg-gray-50 divide-y divide-gray-200">
-                  {composeItem && (
-                    <div className="py-3">
-                      <div className="text-xs font-medium text-gray-500 mb-2">选题方向</div>
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="text-sm font-semibold text-gray-900 leading-5">{getTopic(composeItem)}</div>
-                        <span className="text-xs px-2 py-1 rounded inline-flex items-center gap-1" style={{ backgroundColor: brandBg(composeItem.platform), color: brandText(composeItem.platform) }}>
-                          <PlatformBadge id={composeItem.platform} size={14} />
-                          <span>{PLATFORM_MAP[composeItem.platform]?.name || composeItem.platform}</span>
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="py-3">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Lightbulb className="w-4 h-4 text-amber-500" />
-                      <div className="text-sm font-medium text-gray-900">内容灵感</div>
-                    </div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <select value={composeIndustry} onChange={(e)=>setComposeIndustry(e.target.value)} className="text-sm border border-gray-300 rounded px-2 py-1 w-full bg-white">
-                        <option value="">选择行业</option>
-                        <option value="saas">SaaS</option>
-                        <option value="beauty">美妆</option>
-                        <option value="food">餐饮</option>
-                      </select>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      {(CONTENT_THEMES[composeIndustry] || []).map(theme => (
-                        <button key={theme.id} onClick={()=>{ setComposeTitle(theme.title); setComposeBody(theme.description) }} className="text-left px-3 py-2 bg-white rounded border border-gray-200 hover:bg-gray-100 text-sm">
-                          <div className="font-medium text-gray-900">{theme.title}</div>
-                          <div className="text-xs text-gray-600">{theme.description}</div>
-                        </button>
-                      ))}
+              <div className="md:sticky top-4 h-full overflow-y-auto hide-scrollbar">
+                {composeItem && (
+                  <div className="rounded-xl p-4 bg-gray-50 mb-4">
+                    <div className="text-xs font-medium text-gray-500 mb-2">选题方向</div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="text-sm font-semibold text-gray-900 leading-5">{getTopic(composeItem)}</div>
+                      <span className="text-xs px-2 py-1 rounded inline-flex items-center gap-1" style={{ backgroundColor: brandBg(composeItem.platform), color: brandText(composeItem.platform) }}>
+                        <PlatformBadge id={composeItem.platform} size={14} />
+                        <span>{PLATFORM_MAP[composeItem.platform]?.name || composeItem.platform || '未选择平台'}</span>
+                      </span>
                     </div>
                   </div>
-
-                  <div className="py-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Info className="w-4 h-4 text-blue-600" />
-                      <div className="text-sm font-medium text-gray-900">平台适配提醒</div>
-                    </div>
-                    {composeItem && (
-                      <div className="text-sm text-gray-700">{PLATFORM_TIPS[composeItem.platform] || '根据平台进行内容形式适配'}</div>
-                    )}
-                  </div>
+                )}
+                <div className="mb-4">
+                  <AiDraftAssistant 
+                    currentProduct={currentProduct} 
+                    composeItem={composeItem}
+                    topic={composeTitle || getTopic(composeItem)}
+                    platform={composeItem?.platform}
+                    onDraftGenerated={(draft) => setComposeBody(draft)}
+                  />
                 </div>
               </div>
             </div>
@@ -314,10 +318,8 @@ export default function ContentPlanningPage({ currentProduct }) {
                   return (
                     <div
                       key={idx}
-                      className={`border rounded-lg p-1 min-h-[110px] ${inMonth?'border-gray-200 bg-white':'border-gray-200 bg-gray-50'} relative group`}
-                      onMouseEnter={() => setHoverPreview({ key, items: dayItems })}
-                      onMouseLeave={() => setHoverPreview({ key: null, items: [] })}
-                      onClick={() => setSelectedDate({ date: key, items: dayItems })}
+                      className={`border rounded-lg p-1 min-h-[110px] ${selectedDate?.date === key ? 'ring-2 ring-blue-500 border-transparent z-10' : inMonth?'border-gray-200 bg-white':'border-gray-200 bg-gray-50'} relative group transition-all cursor-pointer`}
+                      onClick={() => setSelectedDate(prev => (prev?.date === key ? null : { date: key, items: dayItems }))}
                     >
                       <div className={`flex items-center justify-between mb-1 ${inMonth?'text-gray-900':'text-gray-400'}`}>
                         <span className="text-xs">{d.getDate()}</span>
@@ -337,23 +339,11 @@ export default function ContentPlanningPage({ currentProduct }) {
                         <div className="w-full h-1 rounded overflow-hidden flex">
                           <div className="h-1 bg-gray-400" style={{ flexBasis: 0, flexGrow: dist.not_started }} />
                           <div className="h-1 bg-yellow-400" style={{ flexBasis: 0, flexGrow: dist.writing }} />
-                          <div className="h-1 bg-purple-500" style={{ flexBasis: 0, flexGrow: dist.pending_publish }} />
+                          <div className="h-1 bg-blue-500" style={{ flexBasis: 0, flexGrow: dist.pending_publish }} />
                           <div className="h-1 bg-green-500" style={{ flexBasis: 0, flexGrow: dist.published }} />
                         </div>
                       )}
-                    {hoverPreview.key === key && dayItems.length > 0 && (
-                      <div className="absolute z-10 left-2 right-2 top-10 bg-white border border-gray-200 rounded-lg shadow p-2">
-                        {dayItems.slice().sort((a,b)=>{
-                          const ua = pickUpdatedAt(a) || a.created_at
-                          const ub = pickUpdatedAt(b) || b.created_at
-                          return new Date(ub) - new Date(ua)
-                        }).map(it => (
-                          <div key={it.id} className="text-xs text-gray-700 truncate">
-                            {getTopic(it)}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    
                   </div>
                 )
               })}
@@ -361,35 +351,74 @@ export default function ContentPlanningPage({ currentProduct }) {
               <div className="flex items-center space-x-4 text-xs text-gray-600">
                 <div className="flex items-center space-x-1"><span className="w-3 h-3 bg-gray-400 rounded-sm"></span><span>未开始</span></div>
                 <div className="flex items-center space-x-1"><span className="w-3 h-3 bg-yellow-400 rounded-sm"></span><span>撰写中</span></div>
-                <div className="flex items-center space-x-1"><span className="w-3 h-3 bg-purple-500 rounded-sm"></span><span>待发布</span></div>
+                <div className="flex items-center space-x-1"><span className="w-3 h-3 bg-blue-500 rounded-sm"></span><span>待发布</span></div>
                 <div className="flex items-center space-x-1"><span className="w-3 h-3 bg-green-500 rounded-sm"></span><span>已发布</span></div>
               </div>
             </div>
             <div className="col-span-1">
-              <div className="bg-gray-50 rounded-xl p-4 h-full">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="text-sm font-semibold text-gray-900">本月内容</div>
-                  <div className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-700">{Array.from(groupedByDate.keys()).filter(k => isSameMonth(new Date(k), currentMonth)).reduce((acc,k)=> acc + (groupedByDate.get(k)?.length || 0), 0)}</div>
+              <div className="bg-gray-50 rounded-xl p-4 h-[calc(100vh-180px)] sticky top-0 flex flex-col">
+                <div className="flex items-center justify-between mb-3 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <div className="text-sm font-semibold text-gray-900">{selectedDate ? '当日内容' : '本月内容'}</div>
+                    {selectedDate && (
+                      <button onClick={()=>setSelectedDate(null)} className="text-xs text-gray-700 hover:bg-gray-100 px-2 py-1 rounded">清除选择</button>
+                    )}
+                  </div>
+                  <div className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-700">{
+                    selectedDate 
+                      ? (groupedByDate.get(selectedDate.date)?.length || 0)
+                      : Array.from(groupedByDate.keys()).filter(k => isSameMonth(new Date(k), currentMonth)).reduce((acc,k)=> acc + (groupedByDate.get(k)?.length || 0), 0)
+                  }</div>
                 </div>
-                <div className="relative">
-                  <div className="absolute left-4 top-0 bottom-0 w-px bg-gray-200"></div>
-                  <div className="space-y-4 max-h-[calc(100vh-260px)] overflow-auto pr-2">
+                <div className="relative flex-1 min-h-0">
+                  {(!isLoading && hasLoaded && filtered.length === 0) ? null : (
+                    <div className="absolute left-2.5 top-2 bottom-0 w-px bg-blue-100"></div>
+                  )}
+                  <div className="space-y-4 h-full overflow-y-auto pr-2 content-plan-scroll">
                     {isLoading ? (
-                      <div className="text-center text-gray-500 py-8">加载中...</div>
-                    ) : (
+                  <div className="space-y-8 pl-7 relative">
+                    <div className="absolute left-2.5 top-2 bottom-0 w-px bg-blue-100"></div>
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="animate-pulse">
+                        <div className="flex items-center mb-2">
+                          <div className="w-3 h-3 rounded-full bg-gray-200 border border-white relative -ml-6 mr-3"></div>
+                          <div className="h-4 bg-gray-200 rounded w-24"></div>
+                        </div>
+                        <div className="space-y-3">
+                          {[1, 2].map((j) => (
+                            <div key={j} className="border border-gray-100 rounded-lg bg-white p-4 space-y-3">
+                              <div className="flex justify-between items-start">
+                                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                                <div className="h-4 bg-gray-200 rounded w-8"></div>
+                              </div>
+                              <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                              <div className="flex gap-2">
+                                <div className="h-5 bg-gray-200 rounded w-16"></div>
+                                <div className="h-5 bg-gray-200 rounded w-12"></div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
                       <>
                     {Object.entries(Object.fromEntries(groupedByDate))
-                          .filter(([date]) => isSameMonth(new Date(date), currentMonth))
+                          .filter(([date]) => {
+                            if (selectedDate) return date === selectedDate.date
+                            return isSameMonth(new Date(date), currentMonth)
+                          })
                           .sort((a,b)=>{
                             const maxA = Math.max(...(a[1]||[]).map(x=> new Date(pickUpdatedAt(x) || x.created_at).getTime()))
                             const maxB = Math.max(...(b[1]||[]).map(x=> new Date(pickUpdatedAt(x) || x.created_at).getTime()))
                             return maxB - maxA
                           })
                           .map(([date, dayItems]) => (
-                          <div key={date} className="pl-10">
-                            <div className="flex items中心 mb-2">
-                              <div className="w-3 h-3 rounded-full bg-gray-300 border border-gray-300 relative -ml-[30px] mr-3"></div>
-                              <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">{date}</div>
+                          <div key={date} className="pl-7">
+                            <div className="flex items-center mb-2">
+                              <div className="w-3 h-3 rounded-full bg-blue-500 border border-blue-500 relative -ml-6 mr-3"></div>
+                              <div className="text-sm font-semibold text-blue-700">{date}</div>
                             </div>
                             <div className="space-y-3">
                               {dayItems.slice().sort((a,b)=>{
@@ -400,7 +429,7 @@ export default function ContentPlanningPage({ currentProduct }) {
                                 const st = inferStatus(it)
                                 const statusColor = 
                                   st==='published' ? 'bg-green-100 text-green-700' :
-                                  st==='pending_publish' ? 'bg-purple-100 text-purple-700' :
+                                  st==='pending_publish' ? 'bg-blue-100 text-blue-700' :
                                   st==='writing' ? 'bg-yellow-100 text-yellow-700' :
                                   'bg-gray-100 text-gray-700'
                                 return (
@@ -421,7 +450,7 @@ export default function ContentPlanningPage({ currentProduct }) {
                                       <div className="flex items-center flex-wrap gap-2">
                                         <span className="text-[12px] px-2 py-1 rounded inline-flex items-center gap-1" style={{ backgroundColor: brandBg(it.platform), color: brandText(it.platform) }}>
                                           <PlatformBadge id={it.platform} size={14} />
-                                          <span>{PLATFORM_MAP[it.platform]?.name || it.platform}</span>
+                                          <span>{PLATFORM_MAP[it.platform]?.name || it.platform || '未选择平台'}</span>
                                         </span>
                                         <span className={`text-[12px] px-2 py-1 rounded ${statusColor}`}>{statusLabel(st)}</span>
                                       </div>
@@ -441,9 +470,11 @@ export default function ContentPlanningPage({ currentProduct }) {
                         </div>
                         <button onClick={()=>openCompose(it)} className="text-xs text-blue-600 hover:underline px-0 py-0 bg-transparent flex-shrink-0">内容创作</button>
                       </div>
-                      <div className="absolute left-0 right-0 mt-1 z-10 bg-white border border-gray-200 rounded shadow p-2 text-[12px] text-gray-700 hidden group-hover:block max-h-48 overflow-y-auto">
-                        {stripHtml(it.body || '')}
-                      </div>
+                      {it.body && stripHtml(it.body) && (
+                        <div className="absolute left-0 right-0 mt-1 z-10 bg-white border border-gray-200 rounded shadow p-2 text-[12px] text-gray-700 hidden group-hover:block max-h-48 overflow-y-auto">
+                          {stripHtml(it.body || '')}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -453,7 +484,38 @@ export default function ContentPlanningPage({ currentProduct }) {
                             </div>
                           </div>
                         ))}
-                        {!isLoading && hasLoaded && filtered.length===0 && <div className="text-center text-gray-500">暂无计划</div>}
+                        {selectedDate && (!groupedByDate.get(selectedDate.date) || (groupedByDate.get(selectedDate.date)?.length || 0) === 0) && (
+                      <div className="flex flex-col items-center justify-center py-16 text-center">
+                        <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-4">
+                          <CalendarDays className="w-8 h-8 text-blue-400" />
+                        </div>
+                        <h3 className="text-lg font-medium text-gray-900 mb-1">暂无数据</h3>
+                        <p className="text-sm text-gray-500 mb-6">该日期暂未安排内容，点击新建计划进行安排</p>
+                        <button 
+                          onClick={() => { setPreFillDate(selectedDate.date); setIsAddOpen(true) }}
+                          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          新建计划
+                        </button>
+                      </div>
+                    )}
+                        {!isLoading && hasLoaded && filtered.length === 0 && !selectedDate && (
+                      <div className="flex flex-col items-center justify-center py-16 text中心">
+                        <div className="w-16 h-16 bg-blue-50 rounded-full flex items中心 justify中心 mb-4">
+                          <CalendarDays className="w-8 h-8 text-blue-400" />
+                        </div>
+                        <h3 className="text-lg font-medium text-gray-900 mb-1">暂无内容计划</h3>
+                        <p className="text-sm text-gray-500 mb-6">这个月还没有安排任何内容，开始规划吧！</p>
+                        <button 
+                          onClick={() => setIsAddOpen(true)}
+                          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          创建新计划
+                        </button>
+                      </div>
+                    )}
                       </>
                     )}
                   </div>
@@ -465,11 +527,38 @@ export default function ContentPlanningPage({ currentProduct }) {
         ) : (
           <div className="space-y-6">
             <div className="text-sm font-semibold text-gray-900">本月内容</div>
-            <div className="relative">
-              <div className="absolute left-4 top-0 bottom-0 w-px bg-gray-200"></div>
+              <div className="relative">
+              {(!isLoading && hasLoaded && filtered.length === 0) ? null : (
+                <div className="absolute left-2.5 top-2 bottom-0 w-px bg-blue-100"></div>
+              )}
               <div className="space-y-4">
                 {isLoading ? (
-                  <div className="text-center text-gray-500 py-8">加载中...</div>
+                  <div className="space-y-8 pl-7 relative">
+                    <div className="absolute left-2.5 top-2 bottom-0 w-px bg-blue-100"></div>
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="animate-pulse">
+                        <div className="flex items-center mb-2">
+                          <div className="w-3 h-3 rounded-full bg-gray-200 border border-white relative -ml-6 mr-3"></div>
+                          <div className="h-4 bg-gray-200 rounded w-24"></div>
+                        </div>
+                        <div className="space-y-3">
+                          {[1, 2].map((j) => (
+                            <div key={j} className="border border-gray-100 rounded-lg bg-white p-4 space-y-3">
+                              <div className="flex justify-between items-start">
+                                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                                <div className="h-4 bg-gray-200 rounded w-8"></div>
+                              </div>
+                              <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                              <div className="flex gap-2">
+                                <div className="h-5 bg-gray-200 rounded w-16"></div>
+                                <div className="h-5 bg-gray-200 rounded w-12"></div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 ) : (
                   <>
                     {Object.entries(Object.fromEntries(groupedByDate))
@@ -479,10 +568,10 @@ export default function ContentPlanningPage({ currentProduct }) {
                         return maxB - maxA
                       })
                       .map(([date, dayItems]) => (
-                      <div key={date} className="pl-10">
+                      <div key={date} className="pl-7">
                         <div className="flex items-center mb-2">
-                          <div className="w-3 h-3 rounded满 bg-gray-300 border border-gray-300 relative -ml-[30px] mr-3"></div>
-                          <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">{date}</div>
+                          <div className="w-3 h-3 rounded-full bg-blue-500 border border-blue-500 relative -ml-6 mr-3"></div>
+                          <div className="text-sm font-semibold text-blue-700">{date}</div>
                         </div>
                         <div className="space-y-3">
                           {dayItems.slice().sort((a,b)=>{
@@ -493,7 +582,7 @@ export default function ContentPlanningPage({ currentProduct }) {
                             const st = inferStatus(it)
                             const statusColor = 
                               st==='published' ? 'bg-green-100 text-green-700' :
-                              st==='pending_publish' ? 'bg-purple-100 text-purple-700' :
+                              st==='pending_publish' ? 'bg-blue-100 text-blue-700' :
                               st==='writing' ? 'bg-yellow-100 text-yellow-700' :
                               'bg-gray-100 text-gray-700'
                             return (
@@ -514,7 +603,7 @@ export default function ContentPlanningPage({ currentProduct }) {
                                   <div className="flex items-center flex-wrap gap-2">
                                     <span className="text-[12px] px-2 py-1 rounded inline-flex items-center gap-1" style={{ backgroundColor: brandBg(it.platform), color: brandText(it.platform) }}>
                                       <PlatformBadge id={it.platform} size={14} />
-                                      <span>{PLATFORM_MAP[it.platform]?.name || it.platform}</span>
+                                      <span>{PLATFORM_MAP[it.platform]?.name || it.platform || '未选择平台'}</span>
                                     </span>
                                     <span className={`text-[12px] px-2 py-1 rounded ${statusColor}`}>{statusLabel(st)}</span>
                                   </div>
@@ -529,14 +618,16 @@ export default function ContentPlanningPage({ currentProduct }) {
                                   <div className="mt-2">
                                     <div className="relative group rounded-lg p-2 bg-gray-50">
                                       <div className="flex items-start justify-between gap-2">
-                                        <div className="text-[12px] text-gray-600 line-clamp-2 flex-1">
-                                          {getBodyExcerpt(it) || '暂无内容预览'}
-                                        </div>
-                                        <button onClick={()=>openCompose(it)} className="text-xs text-blue-600 hover:underline px-0 py-0 bg-transparent flex-shrink-0">内容创作</button>
+                                      <div className="text-[12px] text-gray-600 line-clamp-2 flex-1">
+                                        {getBodyExcerpt(it) || '暂无内容预览'}
                                       </div>
+                                      <button onClick={()=>openCompose(it)} className="text-xs text-blue-600 hover:underline px-0 py-0 bg-transparent flex-shrink-0">内容创作</button>
+                                    </div>
+                                    {it.body && stripHtml(it.body) && (
                                       <div className="absolute left-0 right-0 mt-1 z-10 bg-white border border-gray-200 rounded shadow p-2 text-[12px] text-gray-700 hidden group-hover:block max-h-48 overflow-y-auto">
                                         {stripHtml(it.body || '')}
                                       </div>
+                                    )}
                                     </div>
                                   </div>
                                 </div>
@@ -546,7 +637,22 @@ export default function ContentPlanningPage({ currentProduct }) {
                         </div>
                       </div>
                     ))}
-                    {!isLoading && hasLoaded && filtered.length===0 && <div className="text-center text-gray-500">暂无计划</div>}
+                    {!isLoading && hasLoaded && filtered.length === 0 && (
+                      <div className="flex flex-col items-center justify-center py-16 text-center">
+                        <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-4">
+                          <CalendarDays className="w-8 h-8 text-blue-400" />
+                        </div>
+                        <h3 className="text-lg font-medium text-gray-900 mb-1">暂无内容计划</h3>
+                        <p className="text-sm text-gray-500 mb-6">这个月还没有安排任何内容，开始规划吧！</p>
+                        <button 
+                          onClick={() => setIsAddOpen(true)}
+                          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          创建新计划
+                        </button>
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -557,15 +663,30 @@ export default function ContentPlanningPage({ currentProduct }) {
 
       {isAddOpen && (
         <AddContentItemModalEnhanced 
-          onClose={()=>setIsAddOpen(false)}
+          onClose={()=>{
+            setIsAddOpen(false)
+            if (onPlanCreated) onPlanCreated() // Clear parent state on close
+          }}
           onSubmit={async (form)=>{
             const created = await createContentItem({ product_id: currentProduct.id, platform: form.platform, schedule_at: form.schedule_at, status: form.status, topic_title: form.topic_title })
+            
+            // If we have initialPlanData with content (outline/body), update the item immediately
+            let finalItem = created
+            if (initialPlanData && initialPlanData.outline) {
+               const outlineHtml = `
+                 <h2>核心观点</h2><p>${initialPlanData.core_view}</p>
+                 <h2>大纲</h2><ul>${initialPlanData.outline.map(line => `<li>${line}</li>`).join('')}</ul>
+               `
+               const updated = await updateContentItem(created.id, { body: outlineHtml })
+               finalItem = updated
+            }
+
             const createdWithTopic = {
-              ...created,
-              topic_title: typeof created?.topic_title !== 'undefined' ? created.topic_title : (form.topic_title || '')
+              ...finalItem,
+              topic_title: typeof finalItem?.topic_title !== 'undefined' ? finalItem.topic_title : (form.topic_title || '')
             }
             setItems(prev => {
-              const matchPlatform = platform === 'all' || created.platform === platform
+              const matchPlatform = platform === 'all' || createdWithTopic.platform === platform
               const base = Array.isArray(prev) ? prev.slice() : []
               if (!matchPlatform) return base
               const next = [...base, createdWithTopic]
@@ -580,11 +701,15 @@ export default function ContentPlanningPage({ currentProduct }) {
               const merged = [...cached, createdWithTopic].sort((a,b)=> new Date(a.schedule_at) - new Date(b.schedule_at))
               localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data: merged }))
             } catch { void 0 }
+            
             setIsAddOpen(false)
             setPreFillDate(null)
+            setPreFillItem(null)
+            if (onPlanCreated) onPlanCreated()
           }}
           currentProduct={currentProduct}
           defaultScheduleAt={preFillDate || ''}
+          initialItem={preFillItem}
         />
       )}
 
@@ -633,28 +758,7 @@ export default function ContentPlanningPage({ currentProduct }) {
         />
       )}
 
-      {selectedDate && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-40" onClick={()=>setSelectedDate(null)}>
-          <div className="bg-white rounded-xl w-full max-w-lg p-4" onClick={(e)=>e.stopPropagation()}>
-            <div className="text-sm font-semibold text-gray-900 mb-2">{selectedDate.date}</div>
-            <div className="space-y-2">
-              {selectedDate.items.map(it => (
-                <div key={it.id} className="border border-gray-200 rounded-lg p-3">
-                  <div className="font-medium text-gray-900">{getTopic(it)}</div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <PlatformBadge id={it.platform} size={16} />
-                    <span className="text-xs text-gray-600">{PLATFORM_MAP[it.platform]?.name || it.platform}</span>
-                  </div>
-                </div>
-              ))}
-              {selectedDate.items.length===0 && <div className="text-sm text-gray-600">该日期暂无内容</div>}
-            </div>
-            <div className="mt-4 flex justify-end">
-              <button className="px-3 py-1 rounded bg-gray-100 text-gray-700" onClick={()=>setSelectedDate(null)}>关闭</button>
-            </div>
-          </div>
-        </div>
-      )}
+
     </div>
   )
 }
@@ -730,10 +834,8 @@ function stripHtml(html){
 }
 
 function getBodyExcerpt(it){
-  const t = stripHtml(it.body || '')
-  if (!t) return ''
-  const s = t.slice(0, 80)
-  return t.length>80 ? s + '…' : s
+  if (it.summary) return it.summary
+  return stripHtml(it.body || '')
 }
 
 function groupByDate(items){

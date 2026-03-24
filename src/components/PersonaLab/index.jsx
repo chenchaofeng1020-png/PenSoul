@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { getPersonas, createPersona, updatePersona } from '../../services/api';
+import { getPersonas, createPersona, updatePersona, deletePersona } from '../../services/api';
 import StyleWorkbench from './StyleWorkbench';
-import { MessageSquare, Users, FlaskConical, Plus } from 'lucide-react';
+import { MessageSquare, Users, FlaskConical, Plus, Trash2, Edit2, ArrowLeft, Save } from 'lucide-react';
 
 const PersonaLab = () => {
   const [activeTab, setActiveTab] = useState('list'); // 'list' | 'workbench'
@@ -47,6 +47,19 @@ const PersonaLab = () => {
       }
   };
 
+  const handleDelete = async (id, name) => {
+      if (!confirm(`确定要删除人设 "${name}" 吗？此操作不可恢复。`)) {
+          return;
+      }
+      try {
+          await deletePersona(id);
+          setPersonas(personas.filter(p => p.id !== id));
+      } catch (e) {
+          console.error('Failed to delete persona', e);
+          alert('删除失败: ' + e.message);
+      }
+  };
+
   return (
     <div className="h-full flex flex-col bg-white">
       {/* Header */}
@@ -62,6 +75,30 @@ const PersonaLab = () => {
             <p className="text-xs text-gray-500">MACC 核心组件 - 管理与定制您的 AI 写手团队</p>
           </div>
         </div>
+        
+        {/* Header Actions - only show in workbench mode */}
+        {activeTab === 'workbench' && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setActiveTab('list')}
+              className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>返回列表</span>
+            </button>
+            <button
+              onClick={() => {
+                // Trigger save via ref or context if needed
+                // For now, we'll pass this to StyleWorkbench
+                document.dispatchEvent(new CustomEvent('save-persona'));
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+            >
+              <Save className="w-4 h-4" />
+              <span>保存风格</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Content */}
@@ -85,12 +122,20 @@ const PersonaLab = () => {
                         <div className="col-span-full text-center py-10 text-gray-400">Loading...</div>
                     ) : personas.map(persona => (
                         <div key={persona.id} className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow relative overflow-hidden group">
-                            <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="absolute top-0 right-0 p-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button 
                                     onClick={(e) => { e.stopPropagation(); handleEdit(persona); }}
-                                    className="text-gray-400 hover:text-indigo-600 font-medium text-sm"
+                                    className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                    title="编辑"
                                 >
-                                    Edit
+                                    <Edit2 className="w-4 h-4" />
+                                </button>
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); handleDelete(persona.id, persona.name); }}
+                                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                    title="删除"
+                                >
+                                    <Trash2 className="w-4 h-4" />
                                 </button>
                             </div>
                             
@@ -113,8 +158,8 @@ const PersonaLab = () => {
                                     <h4 className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">Style DNA</h4>
                                     <div className="flex flex-wrap gap-2">
                                         {persona.style_dna?.tone && (
-                                            <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
-                                                Tone: {persona.style_dna.tone}
+                                            <span className="text-xs bg-indigo-50 text-indigo-700 px-2 py-1 rounded">
+                                                {persona.style_dna.tone}
                                             </span>
                                         )}
                                         {persona.style_dna?.pacing && (

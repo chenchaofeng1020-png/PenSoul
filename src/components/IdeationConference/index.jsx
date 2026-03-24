@@ -11,12 +11,14 @@ import {
   getIdeationTopics,
   createIdeationTopic,
   updateIdeationTopic,
+  updateIdeationSession,
   getPersonas,
   chatWithAgent,
   researchWithAgent
 } from '../../services/api';
 import { executeSkill } from '../../services/skills';
 import { agentRuntime } from '../../services/agent/AgentRuntime';
+import { BasePersona, ResearchSkill, IdeationSkill } from '../../services/agent/skills/definitions';
 
 const IdeationConference = ({ currentUser, currentProduct }) => {
   const [sessions, setSessions] = useState([]);
@@ -27,6 +29,8 @@ const IdeationConference = ({ currentUser, currentProduct }) => {
   const [currentPersonaId, setCurrentPersonaId] = useState(null);
   const [isTyping, setIsTyping] = useState(false);
   const [isResearching, setIsResearching] = useState(false);
+  const [researchPlan, setResearchPlan] = useState(null);
+  const [previewContent, setPreviewContent] = useState(null);
 
   // Load Personas & Sessions
   useEffect(() => {
@@ -138,11 +142,39 @@ const IdeationConference = ({ currentUser, currentProduct }) => {
     }
   };
 
+  const generateSmartTitle = async (content) => {
+    try {
+      // 1. Generate title using LLM
+      const { reply } = await agentRuntime.run({
+        systemPrompt: '你是一个专业的编辑助手。请根据用户的输入，总结一个精简的会话标题（10字以内）。直接输出标题，不要包含引号或其他废话。',
+        userMessage: content
+      });
+      
+      const newTitle = reply.trim().replace(/^["'《]+|["'》]+$/g, '');
+      
+      if (newTitle && currentSessionId) {
+        // 2. Update DB
+        await updateIdeationSession(currentSessionId, { title: newTitle });
+        
+        // 3. Update Local State
+        setSessions(prev => prev.map(s => s.id === currentSessionId ? { ...s, title: newTitle } : s));
+      }
+    } catch (e) {
+      console.warn('Failed to auto-generate title', e);
+    }
+  };
+
   const handleSendMessage = async (content) => {
     // Optimistic update
     const tempUserMsg = { id: 'temp-' + Date.now(), role: 'user', content, created_at: new Date().toISOString() };
     setMessages(prev => [...prev, tempUserMsg]);
     setIsTyping(true);
+
+    // Check if title needs update (Async, non-blocking)
+    const currentSession = sessions.find(s => s.id === currentSessionId);
+    if (currentSession && currentSession.title.startsWith('新策划') && content.length > 2) {
+        generateSmartTitle(content);
+    }
 
     try {
       // 1. Save user message
@@ -155,24 +187,15 @@ const IdeationConference = ({ currentUser, currentProduct }) => {
       // 2. Call Agent
       const defaultPersona = personas.find(p => p.name === '公众号深度洞察文章') || personas[0];
       const persona = personas.find(p => p.id === currentPersonaId) || defaultPersona;
+      const currentDate = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
       const systemPrompt = `
-${persona.role_definition || persona.prompt || '你是一个专业的编辑'}
-你现在在“选题会议室”中，扮演“算命先生·诸葛”。
-你的核心能力是帮助用户把模糊的灵感打磨成惊艳的选题。
+当前日期：${currentDate}
 
-【能力升级】
-你现在拥有全网实时调研能力。
-请在对话中**灵活判断**：
-- 如果用户的话题涉及到最新的热点、陌生的领域，或者你需要数据支撑，请**自主决策**调用“research”工具。
-- 在决定调用工具前，请先向用户说明你的意图，例如：“这个问题很有趣，我需要让卓伟去查一下最新的数据...”
-- 搜索是为你服务的，但搜索结果（文档）也会同步展示给用户。
+${BasePersona(persona)}
 
-【工作流程】
-1. **聆听与判断**：分析用户输入。如果需要补充信息，立即调研。
-2. **调研与内化**：调用调研工具后，系统会展示调研报告。请你阅读报告，提取关键信息。
-3. **输出方案**：
-   - 先展示你的**思考过程**（Analysis）：你从报告里看到了什么关键点？
-   - 再给出**策划建议**（Proposal）：基于这些点，你有哪些选题主意？
+${ResearchSkill}
+
+${IdeationSkill}
 `;
 
       // Construct context (last 10 messages)
@@ -197,73 +220,92 @@ ${content}
       });
 
       // 2.1 Check for Tool Call (Research)
-      const toolCallMatch = reply.match(/```json\s*(\{[\s\S]*?"tool_call"\s*:\s*"research"[\s\S]*?\})\s*```/);
+      // Allow for json block with or without "json" language tag, or even just the object if it's clear
+      const toolCallMatch = reply.match(/```(?:json)?\s*(\{[\s\S]*?"tool_call"\s*:\s*"research"[\s\S]*?\})\s*```/);
       
       if (toolCallMatch) {
           try {
               const toolCall = JSON.parse(toolCallMatch[1]);
-              const query = toolCall.query;
-              
-              if (query) {
-                  // Set Researching State
-                  setIsResearching(true);
-                  
-                  // Add invisible system message or show user that research is happening
-                  const researchingMsg = await addIdeationMessage({
-                      session_id: currentSessionId,
-                      role: 'assistant', // Use assistant role but maybe format differently? 
-                      content: `🕵️ **诸葛委托卓伟正在调研：** ${query}...`
-                  });
-                  setMessages(prev => prev.map(m => m.id === tempUserMsg.id ? { ...tempUserMsg, id: 'saved-' + Date.now() } : m).concat(researchingMsg));
-                  
-                  // Call Zhuowei
-                  const { report, sources } = await researchWithAgent(query);
-                  
-                  // Update message to show done
-                  setIsResearching(false);
+              const researchType = toolCall.type || 'deep'; // Default to deep for backward compatibility
 
-                  // 2.2 Display Full Report & Sources
-                  let displayContent = "";
+              if (researchType === 'quick') {
+                  // === L1: Quick Search ===
+                  const query = toolCall.query;
+                  if (query) {
+                      console.log('Executing quick search:', query);
+                      
+                      // 2. Execute Search (Zhuowei)
+                      const { report } = await researchWithAgent(query);
+                      
+                      // 3. Inject result back to Zhuge immediately
+                      const followUpMessage = `
+【系统通知】针对你的轻量级检索请求 "${query}"，系统已查证：
+"""
+${report}
+"""
+
+请结合以上查证结果，直接回答用户的问题。不要提及你是通过工具查到的，自然地融入对话即可。
+`;
+                      const { reply: finalReply } = await agentRuntime.run({
+                          systemPrompt: systemPrompt,
+                          userMessage: followUpMessage,
+                          context: {
+                              persona: currentPersona
+                          }
+                      });
+                      
+                      reply = finalReply;
+                  }
+              } else {
+                  // === L2: Deep Research (Existing Logic) ===
+                  const plan = toolCall.plan || { 
+                      main_topic: toolCall.query, 
+                      sub_queries: [toolCall.query] 
+                  };
                   
-                  // Construct Source List
-                  let sourceList = "";
-                  let validSources = sources || [];
-                  if (validSources.length === 0) {
-                      const linkRegex = /\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g;
-                      let match;
-                      while ((match = linkRegex.exec(report)) !== null) {
-                          validSources.push({ title: match[1], url: match[2] });
+                  if (plan.main_topic) {
+                      setIsResearching(true);
+                      setResearchPlan(plan);
+                      
+                      const { report, sources } = await researchWithAgent(plan.main_topic);
+                      
+                      setIsResearching(false);
+                      setResearchPlan(null);
+
+                      // 2.2 Display Full Report & Sources
+                      let validSources = sources || [];
+                      if (validSources.length === 0) {
+                          const linkRegex = /\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g;
+                          let match;
+                          while ((match = linkRegex.exec(report)) !== null) {
+                              validSources.push({ title: match[1], url: match[2] });
+                          }
                       }
-                  }
-                  if (validSources.length > 0) {
-                      sourceList = validSources.slice(0, 5).map(s => `- [${s.title}](${s.url})`).join('\n');
-                  }
+                      
+                      let sourceList = "";
+                      if (validSources.length > 0) {
+                          sourceList = validSources.slice(0, 5).map(s => `- [${s.title}](${s.url})`).join('\n');
+                      }
 
-                  // Construct Display Message (Use details for collapsible report)
-                  displayContent = `### 📄 全网调研报告\n\n`;
-                  displayContent += `> 卓伟已完成对“${query}”的深度调研，生成了以下文档。\n\n`;
-                  
-                  // Add Report Content
-                  displayContent += `#### 📝 调研详情\n`;
-                  displayContent += `${report}\n\n`;
-                  
-                  // Add Sources
-                  if (sourceList) {
-                      displayContent += `#### 🔗 参考来源\n${sourceList}`;
-                  } else {
-                      displayContent += `#### 🔗 参考来源\n已完成全网深度检索`;
-                  }
-                  
-                  // Add "Report" message
-                  const reportMsg = await addIdeationMessage({
-                      session_id: currentSessionId,
-                      role: 'assistant', 
-                      content: displayContent
-                  });
-                  setMessages(prev => prev.concat(reportMsg));
-                  
-                  // 2.3 Send Follow-up to Zhuge with Instructions
-                  const followUpMessage = `
+                      setPreviewContent({
+                          title: `调研报告：${plan.main_topic}`,
+                          content: `${report}\n\n#### 🔗 参考来源\n${sourceList || '已完成全网深度检索'}`,
+                          sources: validSources
+                      });
+
+                      let displayContent = `### 📄 全网调研报告\n\n`;
+                      displayContent += `> 卓伟已完成对“${plan.main_topic}”的深度调研，生成了以下文档。\n\n`;
+                      displayContent += `#### 📝 调研详情\n${report}\n\n`;
+                      displayContent += `#### 🔗 参考来源\n${sourceList || '已完成全网深度检索'}`;
+                      
+                      const reportMsg = await addIdeationMessage({
+                          session_id: currentSessionId,
+                          role: 'assistant', 
+                          content: displayContent
+                      });
+                      setMessages(prev => prev.concat(reportMsg));
+                      
+                      const followUpMessage = `
 【系统通知】卓伟的调研报告已生成并展示给用户（见上文）。
 调研报告内容如下：
 """
@@ -277,21 +319,23 @@ ${report}
 
 请让用户感觉到你是在消化了这份文档后，经过深思熟虑才给出的建议。
 `;
-                  const { reply: finalReply } = await agentRuntime.run({
-                      systemPrompt: systemPrompt,
-                      userMessage: followUpMessage,
-                      context: {
-                          persona: currentPersona
-                      }
-                  });
-                  
-                  reply = finalReply;
+                      const { reply: finalReply } = await agentRuntime.run({
+                          systemPrompt: systemPrompt,
+                          userMessage: followUpMessage,
+                          context: {
+                              persona: currentPersona
+                          }
+                      });
+                      
+                      reply = finalReply;
+                  }
               }
           } catch (e) {
               console.error('Failed to execute research tool', e);
               reply += `\n\n(调研指令执行失败: ${e.message})`;
           } finally {
               setIsResearching(false);
+              setResearchPlan(null);
           }
       }
 
@@ -318,8 +362,8 @@ ${report}
             }
           }
           
-          // Remove JSON from display content
-          finalContent = reply.replace(jsonMatch[0], '\n\n*(已自动生成选题卡片)*');
+          // Remove JSON from display content, but keep a subtle system indicator
+          finalContent = reply.replace(jsonMatch[0], '\n\n> 💡 *系统提示：选题卡片已生成至右侧看板*');
         } catch (e) {
           console.error('Failed to parse JSON from agent', e);
         }
@@ -379,7 +423,7 @@ ${report}
   };
 
   return (
-    <div className="flex h-full border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white relative">
+    <div className="flex h-full bg-white relative">
       <button 
         onClick={handleTestSkill}
         className="absolute bottom-4 left-4 z-50 bg-indigo-600 text-white px-3 py-1.5 rounded-full shadow-lg hover:bg-indigo-700 text-xs font-bold flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity"
@@ -402,14 +446,20 @@ ${report}
         onSendMessage={handleSendMessage}
         isTyping={isTyping}
         isResearching={isResearching}
+        researchPlan={researchPlan}
         currentPersona={personas.find(p => p.id === currentPersonaId) || personas[0]}
         personas={personas}
         currentPersonaId={currentPersonaId}
         onPersonaChange={setCurrentPersonaId}
+        onViewReport={(reportData) => {
+            setPreviewContent(reportData);
+        }}
       />
           <StrategyBoard 
             topics={topics}
             onScheduleTopic={handleScheduleTopic}
+            previewContent={previewContent}
+            onClearPreview={() => setPreviewContent(null)}
           />
         </>
       ) : (

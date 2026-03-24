@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { executeSkill } from '../../services/skills';
-import { Save, ArrowLeft } from 'lucide-react';
+
 
 const StyleWorkbench = ({ initialPersona, onSave, onBack }) => {
   // Input State
@@ -26,6 +26,17 @@ const StyleWorkbench = ({ initialPersona, onSave, onBack }) => {
       setResult(initialPersona.style_dna || null);
     }
   }, [initialPersona]);
+
+  // Listen for save event from parent header
+  useEffect(() => {
+    const handleSaveEvent = () => {
+      handleSave();
+    };
+    document.addEventListener('save-persona', handleSaveEvent);
+    return () => {
+      document.removeEventListener('save-persona', handleSaveEvent);
+    };
+  }, [personaName, personaDesc, result, initialPersona]);
 
   const handleSave = () => {
     if (onSave) {
@@ -75,18 +86,8 @@ const StyleWorkbench = ({ initialPersona, onSave, onBack }) => {
     <div className="flex h-full bg-white gap-6 p-6 overflow-hidden">
       {/* Left Panel: Basic Info & Control */}
       <div className="w-1/3 flex flex-col gap-6 overflow-y-auto pr-2">
-        {/* Back Button & Basic Info Section */}
+        {/* Basic Info Section */}
         <div className="flex flex-col gap-4">
-            {onBack && (
-                <button 
-                    onClick={onBack}
-                    className="flex items-center gap-2 text-gray-500 hover:text-indigo-600 transition-colors self-start px-2 py-1 -ml-2 rounded-lg hover:bg-gray-100"
-                >
-                    <ArrowLeft className="w-5 h-5" />
-                    <span className="font-medium">返回列表</span>
-                </button>
-            )}
-
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
             <h3 className="text-lg font-bold text-gray-800 mb-4">基本信息</h3>
             
@@ -163,8 +164,7 @@ const StyleWorkbench = ({ initialPersona, onSave, onBack }) => {
       {/* Right Panel: Content Display */}
       <div className="w-2/3 bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col overflow-hidden">
         {/* Tabs Header */}
-        <div className="flex items-center justify-between border-b border-gray-200 px-2 overflow-x-auto">
-          <div className="flex items-center">
+        <div className="flex items-center border-b border-gray-200 px-2 overflow-x-auto">
           {tabs.map((tab) => (
             <button
               key={tab.id}
@@ -178,16 +178,6 @@ const StyleWorkbench = ({ initialPersona, onSave, onBack }) => {
               {tab.label}
             </button>
           ))}
-          </div>
-          <div className="pr-4">
-            <button
-              onClick={handleSave}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
-            >
-              <Save className="w-4 h-4" />
-              <span>保存风格</span>
-            </button>
-          </div>
         </div>
 
         {/* Content Area */}

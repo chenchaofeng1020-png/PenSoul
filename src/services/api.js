@@ -58,6 +58,30 @@ try {
     if (savedContentItems) {
       mockStore.contentItems = JSON.parse(savedContentItems)
     }
+    const savedSellingPoints = localStorage.getItem('mock_sellingPoints')
+    if (savedSellingPoints) {
+      mockStore.sellingPoints = JSON.parse(savedSellingPoints)
+    }
+    const savedFeatures = localStorage.getItem('mock_features')
+    if (savedFeatures) {
+      mockStore.features = JSON.parse(savedFeatures)
+    }
+    const savedStories = localStorage.getItem('mock_stories')
+    if (savedStories) {
+      mockStore.stories = JSON.parse(savedStories)
+    }
+    const savedFaqs = localStorage.getItem('mock_faqs')
+    if (savedFaqs) {
+      mockStore.faqs = JSON.parse(savedFaqs)
+    }
+    const savedFeatureCards = localStorage.getItem('mock_featureCards')
+    if (savedFeatureCards) {
+      mockStore.featureCards = JSON.parse(savedFeatureCards)
+    }
+    const savedMessaging = localStorage.getItem('mock_messaging')
+    if (savedMessaging) {
+      mockStore.messaging = JSON.parse(savedMessaging)
+    }
     const savedPersonas = localStorage.getItem('mock_personas')
     if (savedPersonas) {
       let loadedPersonas = JSON.parse(savedPersonas)
@@ -260,19 +284,71 @@ export async function updateProduct(productId, updates) {
 }
 
 
+// 获取产品功能特性
+export async function getProductFeatures(productId) {
+  if (!hasSupabaseConfig()) {
+      return (mockStore.features || []).filter(f => f.product_id === productId)
+  }
+  const { data, error } = await supabase
+    .from('product_features')
+    .select('*')
+    .eq('product_id', productId)
+    .order('created_at', { ascending: true })
+  if (error) {
+    // Retry with 'features' table name if 'product_features' fails
+    if (error.message.includes('relation') || error.message.includes('does not exist') || error.message.includes('product_features') || error.message.includes('schema cache')) {
+       const { data: data2, error: error2 } = await supabase
+        .from('features')
+        .select('*')
+        .eq('product_id', productId)
+        .order('created_at', { ascending: true })
+       if (error2) {
+         if (error2.message.includes('relation') || error2.message.includes('does not exist') || error2.message.includes('schema cache')) {
+            console.warn('[Supabase] Tables product_features/features missing, falling back to mock.')
+            return (mockStore.features || []).filter(f => f.product_id === productId)
+         }
+         throw new Error(error2.message)
+       }
+       return data2 || []
+    }
+    throw new Error(error.message)
+  }
+  return data || []
+}
+
 // 获取产品卖点
 export async function getProductSellingPoints(productId) {
   if (!hasSupabaseConfig()) {
-      return mockStore.sellingPoints.filter(sp => sp.product_id === productId).sort((a,b) => b.priority - a.priority)
+      return (mockStore.sellingPoints || []).filter(sp => sp.product_id === productId)
   }
   const { data, error } = await supabase
     .from('product_selling_points')
     .select('*')
     .eq('product_id', productId)
-    .order('priority', { ascending: false })
-  if (error) throw new Error(error.message)
+    .order('created_at', { ascending: true })
+  if (error) {
+     // Retry with 'selling_points'
+     if (error.message.includes('relation') || error.message.includes('does not exist') || error.message.includes('product_selling_points') || error.message.includes('schema cache')) {
+        const { data: data2, error: error2 } = await supabase
+         .from('selling_points')
+         .select('*')
+         .eq('product_id', productId)
+         .order('created_at', { ascending: true })
+        if (error2) {
+          if (error2.message.includes('relation') || error2.message.includes('does not exist') || error2.message.includes('schema cache')) {
+             console.warn('[Supabase] Tables product_selling_points/selling_points missing, falling back to mock.')
+             return (mockStore.sellingPoints || []).filter(sp => sp.product_id === productId)
+          }
+          throw new Error(error2.message)
+        }
+        return data2 || []
+     }
+     throw new Error(error.message)
+  }
   return data || []
 }
+
+
 
 // 添加产品卖点
 export async function addProductSellingPoint(productId, sellingPoint) {
@@ -331,19 +407,6 @@ export async function deleteProductSellingPoint(sellingPointId) {
   return true
 }
 
-// 获取产品特性
-export async function getProductFeatures(productId) {
-  if (!hasSupabaseConfig()) {
-      return mockStore.features.filter(f => f.product_id === productId)
-  }
-  const { data, error } = await supabase
-    .from('product_features')
-    .select('*')
-    .eq('product_id', productId)
-    .order('created_at', { ascending: true })
-  if (error) throw new Error(error.message)
-  return data || []
-}
 
 // 添加产品特性
 export async function addProductFeature(productId, feature) {
@@ -645,6 +708,216 @@ export async function deleteScreenshot(id) {
   return true
 }
 
+export async function uploadScreenshot(file, productId, competitorId) {
+  if (!hasSupabaseConfig()) throw new Error('未配置 Supabase')
+  const ext = (file.name.split('.').pop() || 'png').toLowerCase()
+  const safeExt = ['png','jpg','jpeg','gif','webp','svg'].includes(ext) ? ext : 'png'
+  const path = `${productId}/screenshots/${competitorId || 'general'}/${Date.now()}.${safeExt}`
+  const { error: uploadError } = await supabase.storage.from('screenshots').upload(path, file, { upsert: true, contentType: file.type })
+  if (uploadError) throw new Error(uploadError.message)
+  const { data } = await supabase.storage.from('screenshots').getPublicUrl(path)
+  
+  // Insert record
+  const { data: record, error: dbError } = await supabase.from('screenshots').insert({
+    product_id: productId,
+    competitor_id: competitorId,
+    storage_path: path,
+    url: data.publicUrl
+  }).select('*').single()
+  
+  if (dbError) throw new Error(dbError.message)
+  return record
+}
+
+// 产品功能卡片 (Feature Cards)
+export async function getProductFeatureCards(productId) {
+  if (!hasSupabaseConfig()) {
+      return (mockStore.featureCards || []).filter(fc => fc.product_id === productId)
+  }
+  const { data, error } = await supabase
+    .from('product_feature_cards')
+    .select('*')
+    .eq('product_id', productId)
+    .order('order', { ascending: true })
+  if (error) {
+    if (error.message.includes('relation') || error.message.includes('does not exist') || error.message.includes('product_feature_cards') || error.message.includes('schema cache')) {
+       const { data: data2, error: error2 } = await supabase
+        .from('feature_cards')
+        .select('*')
+        .eq('product_id', productId)
+        .order('order', { ascending: true })
+       if (error2) {
+         if (error2.message.includes('relation') || error2.message.includes('does not exist') || error2.message.includes('schema cache')) {
+            console.warn('[Supabase] Tables product_feature_cards/feature_cards missing, falling back to mock.')
+            return (mockStore.featureCards || []).filter(fc => fc.product_id === productId)
+         }
+         throw new Error(error2.message)
+       }
+       return data2 || []
+    }
+    throw new Error(error.message)
+  }
+  return data || []
+}
+
+export async function addProductFeatureCard(productId, card) {
+  if (!hasSupabaseConfig()) {
+      const newCard = { id: genId(), product_id: productId, created_at: new Date().toISOString(), ...card }
+      mockStore.featureCards.push(newCard)
+      try { localStorage.setItem('mock_featureCards', JSON.stringify(mockStore.featureCards)) } catch (e) { console.error(e) }
+      return newCard
+  }
+  const { 
+    title, 
+    description, 
+    icon, 
+    image_url, 
+    tags = [], 
+    order = 0,
+    launch_date,
+    intro_source,
+    intro_scenario,
+    intro_problem,
+    intro_solution,
+    intro_effect
+  } = card
+  const { data, error } = await supabase
+    .from('product_feature_cards')
+    .insert({ 
+      product_id: productId, 
+      title, 
+      description, 
+      icon, 
+      image_url, 
+      tags, 
+      order,
+      launch_date,
+      intro_source,
+      intro_scenario,
+      intro_problem,
+      intro_solution,
+      intro_effect
+    })
+    .select('*')
+    .single()
+  if (error) throw new Error(error.message)
+  return data
+}
+
+export async function updateProductFeatureCard(cardId, updates) {
+  if (!hasSupabaseConfig()) {
+      const index = mockStore.featureCards.findIndex(c => c.id === cardId)
+      if (index === -1) throw new Error('Card not found')
+      const updated = { ...mockStore.featureCards[index], ...updates }
+      mockStore.featureCards[index] = updated
+      try { localStorage.setItem('mock_featureCards', JSON.stringify(mockStore.featureCards)) } catch (e) { console.error(e) }
+      return updated
+  }
+  const { data, error } = await supabase
+    .from('product_feature_cards')
+    .update(updates)
+    .eq('id', cardId)
+    .select('*')
+    .single()
+  if (error) throw new Error(error.message)
+  return data
+}
+
+export async function deleteProductFeatureCard(cardId) {
+  if (!hasSupabaseConfig()) {
+      mockStore.featureCards = mockStore.featureCards.filter(c => c.id !== cardId)
+      try { localStorage.setItem('mock_featureCards', JSON.stringify(mockStore.featureCards)) } catch (e) { console.error(e) }
+      return true
+  }
+  const { error } = await supabase
+    .from('product_feature_cards')
+    .delete()
+    .eq('id', cardId)
+  if (error) throw new Error(error.message)
+  return true
+}
+
+// 营销文案
+export async function getProductMessaging(productId) {
+  if (!hasSupabaseConfig()) {
+      return (mockStore.messaging || []).filter(m => m.product_id === productId)
+  }
+  const { data, error } = await supabase
+    .from('product_messaging')
+    .select('*')
+    .eq('product_id', productId)
+    .order('created_at', { ascending: true })
+  if (error) {
+    if (error.message.includes('relation') || error.message.includes('does not exist') || error.message.includes('product_messaging') || error.message.includes('schema cache')) {
+       const { data: data2, error: error2 } = await supabase
+        .from('messaging')
+        .select('*')
+        .eq('product_id', productId)
+        .order('created_at', { ascending: true })
+       if (error2) {
+         if (error2.message.includes('relation') || error2.message.includes('does not exist') || error2.message.includes('schema cache')) {
+            console.warn('[Supabase] Tables product_messaging/messaging missing, falling back to mock.')
+            return (mockStore.messaging || []).filter(m => m.product_id === productId)
+         }
+         throw new Error(error2.message)
+       }
+       return data2 || []
+    }
+    throw new Error(error.message)
+  }
+  return data || []
+}
+
+export async function addProductMessaging(productId, messaging) {
+  if (!hasSupabaseConfig()) {
+      const newMsg = { id: genId(), product_id: productId, created_at: new Date().toISOString(), ...messaging }
+      mockStore.messaging.push(newMsg)
+      try { localStorage.setItem('mock_messaging', JSON.stringify(mockStore.messaging)) } catch (e) { console.error(e) }
+      return newMsg
+  }
+  const { type, content, channel, target_audience } = messaging
+  const { data, error } = await supabase
+    .from('product_messaging')
+    .insert({ product_id: productId, type, content, channel, target_audience })
+    .select('*')
+    .single()
+  if (error) throw new Error(error.message)
+  return data
+}
+
+export async function updateProductMessaging(id, updates) {
+  if (!hasSupabaseConfig()) {
+      const index = mockStore.messaging.findIndex(m => m.id === id)
+      if (index === -1) throw new Error('Message not found')
+      const updated = { ...mockStore.messaging[index], ...updates }
+      mockStore.messaging[index] = updated
+      try { localStorage.setItem('mock_messaging', JSON.stringify(mockStore.messaging)) } catch (e) { console.error(e) }
+      return updated
+  }
+  const { data, error } = await supabase
+    .from('product_messaging')
+    .update(updates)
+    .eq('id', id)
+    .select('*')
+    .single()
+  if (error) throw new Error(error.message)
+  return data
+}
+
+export async function deleteProductMessaging(id) {
+  if (!hasSupabaseConfig()) {
+      mockStore.messaging = mockStore.messaging.filter(m => m.id !== id)
+      try { localStorage.setItem('mock_messaging', JSON.stringify(mockStore.messaging)) } catch (e) { console.error(e) }
+      return true
+  }
+  const { error } = await supabase
+    .from('product_messaging')
+    .delete()
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+  return true
+}
+
 export async function getContentItems(productId, { platform, from, to, minimal = false } = {}) {
   if (!hasSupabaseConfig()) {
     let items = mockStore.contentItems.filter(i => i.product_id === productId)
@@ -899,14 +1172,22 @@ export async function deleteProductDoc(docId) {
 }
 
 // 产品常见问题（FAQ）
-export async function listProductFaqs(productId) {
-  if (!hasSupabaseConfig()) return []
+export async function getProductFaqs(productId) {
+  if (!hasSupabaseConfig()) {
+      return (mockStore.faqs || []).filter(f => f.product_id === productId)
+  }
   const { data, error } = await supabase
     .from('product_faqs')
     .select('*')
     .eq('product_id', productId)
     .order('order', { ascending: true })
-  if (error) throw new Error(error.message)
+  if (error) {
+    if (error.message.includes('relation') || error.message.includes('does not exist') || error.message.includes('schema cache')) {
+       console.warn('[Supabase] Table product_faqs missing, falling back to mock.', error.message)
+       return (mockStore.faqs || []).filter(f => f.product_id === productId)
+    }
+    throw new Error(error.message)
+  }
   return data || []
 }
 
@@ -944,20 +1225,93 @@ export async function deleteProductFaq(faqId) {
   return true
 }
 
+// --- User Personas ---
+export async function getProductPersonas(productId) {
+  if (!hasSupabaseConfig()) {
+      return (mockStore.personas || []).filter(p => p.product_id === productId)
+  }
+  const { data, error } = await supabase
+    .from('product_personas')
+    .select('*')
+    .eq('product_id', productId)
+    .order('created_at', { ascending: true })
+  if (error) {
+    if (error.message.includes('relation') || error.message.includes('does not exist') || error.message.includes('schema cache')) {
+       console.warn('[Supabase] Table product_personas missing, falling back to mock.', error.message)
+       return (mockStore.personas || []).filter(p => p.product_id === productId)
+    }
+    throw new Error(error.message)
+  }
+  return data || []
+}
+
 // --- User Stories ---
 export async function getProductStories(productId) {
-  if (!hasSupabaseConfig()) return []
+  if (!hasSupabaseConfig()) {
+      let stories = (mockStore.stories || []).filter(s => s.product_id === productId)
+      if (stories.length === 0 && typeof window !== 'undefined') {
+         // Try to recover from ProductDataManager cache
+         try {
+           const cached = localStorage.getItem(`product_stories_cache_${productId}`)
+           if (cached) {
+             const parsed = JSON.parse(cached)
+             if (Array.isArray(parsed) && parsed.length > 0) {
+               console.log('[api] Recovered stories from component cache', parsed)
+               // Sync to mockStore to persist
+               parsed.forEach(s => {
+                 if (!mockStore.stories.find(ex => ex.id === s.id)) {
+                   mockStore.stories.push({ ...s, product_id: productId })
+                 }
+               })
+               localStorage.setItem('mock_stories', JSON.stringify(mockStore.stories))
+               stories = parsed
+             }
+           }
+         } catch (e) { console.warn('Failed to recover stories cache', e) }
+      }
+      return stories
+  }
   const { data, error } = await supabase
     .from('product_stories')
     .select('*')
     .eq('product_id', productId)
     .order('created_at', { ascending: true })
-  if (error) throw new Error(error.message)
+  if (error) {
+    if (error.message.includes('relation') || error.message.includes('does not exist') || error.message.includes('schema cache')) {
+       console.warn('[Supabase] Table product_stories missing, falling back to mock.', error.message)
+       // Fallback to mock logic (including cache recovery)
+       let stories = (mockStore.stories || []).filter(s => s.product_id === productId)
+       if (stories.length === 0 && typeof window !== 'undefined') {
+          try {
+            const cached = localStorage.getItem(`product_stories_cache_${productId}`)
+            if (cached) {
+              const parsed = JSON.parse(cached)
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                 parsed.forEach(s => {
+                   if (!mockStore.stories.find(ex => ex.id === s.id)) {
+                     mockStore.stories.push({ ...s, product_id: productId })
+                   }
+                 })
+                 localStorage.setItem('mock_stories', JSON.stringify(mockStore.stories))
+                 stories = parsed
+              }
+            }
+          } catch (e) {}
+       }
+       return stories
+    }
+    throw new Error(error.message)
+  }
   return data || []
 }
 
 export async function addProductStory(productId, story) {
-  if (!hasSupabaseConfig()) throw new Error('未配置 Supabase')
+  if (!hasSupabaseConfig()) {
+      const newStory = { id: genId(), product_id: productId, created_at: new Date().toISOString(), ...story }
+      mockStore.stories.push(newStory)
+      try { localStorage.setItem('mock_stories', JSON.stringify(mockStore.stories)) } catch (e) { console.error(e) }
+      return newStory
+  }
   const { data, error } = await supabase
     .from('product_stories')
     .insert({ product_id: productId, ...story })
@@ -968,7 +1322,14 @@ export async function addProductStory(productId, story) {
 }
 
 export async function updateProductStory(id, updates) {
-  if (!hasSupabaseConfig()) throw new Error('未配置 Supabase')
+  if (!hasSupabaseConfig()) {
+      const index = mockStore.stories.findIndex(s => s.id === id)
+      if (index === -1) throw new Error('Story not found')
+      const updated = { ...mockStore.stories[index], ...updates }
+      mockStore.stories[index] = updated
+      try { localStorage.setItem('mock_stories', JSON.stringify(mockStore.stories)) } catch (e) { console.error(e) }
+      return updated
+  }
   const { data, error } = await supabase
     .from('product_stories')
     .update(updates)
@@ -980,7 +1341,11 @@ export async function updateProductStory(id, updates) {
 }
 
 export async function deleteProductStory(id) {
-  if (!hasSupabaseConfig()) throw new Error('未配置 Supabase')
+  if (!hasSupabaseConfig()) {
+      mockStore.stories = mockStore.stories.filter(s => s.id !== id)
+      try { localStorage.setItem('mock_stories', JSON.stringify(mockStore.stories)) } catch (e) { console.error(e) }
+      return true
+  }
   const { error } = await supabase
     .from('product_stories')
     .delete()
@@ -989,33 +1354,35 @@ export async function deleteProductStory(id) {
   return true
 }
 
-// --- Feature Cards ---
-export async function getProductFeatureCards(productId) {
-  if (!hasSupabaseConfig()) return []
-  const { data, error } = await supabase
-    .from('product_feature_cards')
-    .select('*')
-    .eq('product_id', productId)
-    .order('created_at', { ascending: true })
-  if (error) throw new Error(error.message)
-  return data || []
-}
+// --- Product Personas (User Personas for Products) ---
 
-export async function addProductFeatureCard(productId, card) {
-  if (!hasSupabaseConfig()) throw new Error('未配置 Supabase')
+export async function addProductPersona(productId, persona) {
+  if (!hasSupabaseConfig()) {
+      const newPersona = { id: genId(), product_id: productId, created_at: new Date().toISOString(), ...persona }
+      mockStore.personas.push(newPersona)
+      try { localStorage.setItem('mock_personas', JSON.stringify(mockStore.personas)) } catch (e) { console.error(e) }
+      return newPersona
+  }
   const { data, error } = await supabase
-    .from('product_feature_cards')
-    .insert({ product_id: productId, ...card })
+    .from('product_personas')
+    .insert({ product_id: productId, ...persona })
     .select('*')
     .single()
   if (error) throw new Error(error.message)
   return data
 }
 
-export async function updateProductFeatureCard(id, updates) {
-  if (!hasSupabaseConfig()) throw new Error('未配置 Supabase')
+export async function updateProductPersona(id, updates) {
+  if (!hasSupabaseConfig()) {
+      const index = mockStore.personas.findIndex(p => p.id === id)
+      if (index === -1) throw new Error('Persona not found')
+      const updated = { ...mockStore.personas[index], ...updates }
+      mockStore.personas[index] = updated
+      try { localStorage.setItem('mock_personas', JSON.stringify(mockStore.personas)) } catch (e) { console.error(e) }
+      return updated
+  }
   const { data, error } = await supabase
-    .from('product_feature_cards')
+    .from('product_personas')
     .update(updates)
     .eq('id', id)
     .select('*')
@@ -1024,60 +1391,20 @@ export async function updateProductFeatureCard(id, updates) {
   return data
 }
 
-export async function deleteProductFeatureCard(id) {
-  if (!hasSupabaseConfig()) throw new Error('未配置 Supabase')
+export async function deleteProductPersona(id) {
+  if (!hasSupabaseConfig()) {
+      mockStore.personas = mockStore.personas.filter(p => p.id !== id)
+      try { localStorage.setItem('mock_personas', JSON.stringify(mockStore.personas)) } catch (e) { console.error(e) }
+      return true
+  }
   const { error } = await supabase
-    .from('product_feature_cards')
+    .from('product_personas')
     .delete()
     .eq('id', id)
   if (error) throw new Error(error.message)
   return true
 }
 
-// --- Product Messaging ---
-export async function getProductMessaging(productId) {
-  if (!hasSupabaseConfig()) return []
-  const { data, error } = await supabase
-    .from('product_messaging')
-    .select('*')
-    .eq('product_id', productId)
-    .order('created_at', { ascending: true })
-  if (error) throw new Error(error.message)
-  return data || []
-}
-
-export async function addProductMessaging(productId, msg) {
-  if (!hasSupabaseConfig()) throw new Error('未配置 Supabase')
-  const { data, error } = await supabase
-    .from('product_messaging')
-    .insert({ product_id: productId, ...msg })
-    .select('*')
-    .single()
-  if (error) throw new Error(error.message)
-  return data
-}
-
-export async function updateProductMessaging(id, updates) {
-  if (!hasSupabaseConfig()) throw new Error('未配置 Supabase')
-  const { data, error } = await supabase
-    .from('product_messaging')
-    .update(updates)
-    .eq('id', id)
-    .select('*')
-    .single()
-  if (error) throw new Error(error.message)
-  return data
-}
-
-export async function deleteProductMessaging(id) {
-  if (!hasSupabaseConfig()) throw new Error('未配置 Supabase')
-  const { error } = await supabase
-    .from('product_messaging')
-    .delete()
-    .eq('id', id)
-  if (error) throw new Error(error.message)
-  return true
-}
 
 export async function acceptInvitation(token, userInfo) {
   const resp = await fetch(`/api/invitations/${token}/accept`, {
@@ -1486,6 +1813,28 @@ export async function updatePersona(id, updates) {
   const { data, error } = await supabase
     .from('personas')
     .update(safeUpdates)
+    .eq('id', id)
+    .select('*')
+    .single()
+  if (error) throw new Error(error.message)
+  return data
+}
+
+export async function deletePersona(id) {
+  if (!hasSupabaseConfig()) {
+    const idx = mockStore.personas.findIndex(p => p.id === id)
+    if (idx === -1) throw new Error('Persona not found')
+    const deleted = mockStore.personas[idx]
+    mockStore.personas.splice(idx, 1)
+    if (typeof window !== 'undefined' && window.localStorage) {
+      localStorage.setItem('mock_personas', JSON.stringify(mockStore.personas))
+    }
+    return deleted
+  }
+
+  const { data, error } = await supabase
+    .from('personas')
+    .delete()
     .eq('id', id)
     .select('*')
     .single()

@@ -16,7 +16,10 @@ import TrendRadarPage from './components/TrendRadar/TrendRadarPage'
 import SmartTopicWorkbench from './components/SmartTopic/SmartTopicWorkbench'
 import IdeationConference from './components/IdeationConference'
 import PersonaLab from './components/PersonaLab'
+import SmartMaterialPage from './pages/SmartMaterialPage'
 import LandingPage from './pages/LandingPage'
+import EstimationReportPage from './pages/EstimationReportPage'
+import ProductRoadmap from './components/ProductRoadmap'
 import { register as apiRegister, login as apiLogin, getProducts, addProduct as apiAddProduct, getUser as apiGetUser, uploadProductLogo, updateProduct, acceptInvitation, updateUser as apiUpdateUser } from './services/api'
 import { translateAuthError } from './services/authErrors'
 import { useUI } from './context/UIContext'
@@ -380,6 +383,9 @@ function App() {
     if (v === '趋势雷达') {
       v = '热点内容'
     }
+    if (v === '内容规划') {
+      v = '排期公告板'
+    }
     return v
   })
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -459,11 +465,22 @@ function App() {
   const [isLoadingProducts, setIsLoadingProducts] = useState(false)
   const [isCreatingProduct, setIsCreatingProduct] = useState(false)
   const [trendPlanData, setTrendPlanData] = useState(null)
+  const [sources, setSources] = useState([])
   // 初始化时，如果URL中有邀请码，则默认显示登录页；否则显示官网
   const [isLoginPageVisible, setIsLoginPageVisible] = useState(() => {
     const params = new URLSearchParams(window.location.search)
     return !!params.get('invitation')
   })
+
+  // 加载产品数据源
+  useEffect(() => {
+    if (currentProductId) {
+      fetch(`http://localhost:3002/api/smart/sources?productId=${currentProductId}`)
+        .then(res => res.json())
+        .then(data => setSources(data.data || []))
+        .catch(console.error)
+    }
+  }, [currentProductId])
 
   useEffect(() => {
     if (isLoggedIn && currentUser) {
@@ -701,7 +718,7 @@ function App() {
 
   const handleCreatePlanFromTrend = (planData) => {
     setTrendPlanData(planData)
-    setSelectedCategory('内容规划')
+    setSelectedCategory('排期公告板')
   }
 
   const normalizedSelectedCategory = (selectedCategory || '').trim()
@@ -715,6 +732,14 @@ function App() {
   // 公开分享灵感路由 - 拦截登录检查
   if (sharedIdeaId) {
     return <SharedIdeaPage ideaId={sharedIdeaId} />
+  }
+
+  // 人天评估报告分享路由 - 拦截登录检查
+  const hash = window.location.hash
+  const estimationMatch = hash.match(/^#\/estimation\/(.+)$/)
+  if (estimationMatch) {
+    const reportId = estimationMatch[1]
+    return <EstimationReportPage reportId={reportId} />
   }
 
   if (!isLoggedIn) {
@@ -751,7 +776,7 @@ function App() {
         <div className={'bg-white rounded-xl shadow-sm h-full overflow-hidden'}>
         {normalizedSelectedCategory === '系统设置' ? (
           <SettingsPage currentProduct={currentProduct} />
-        ) : normalizedSelectedCategory === '内容规划' ? (
+        ) : normalizedSelectedCategory === '排期公告板' ? (
           <ContentPlanningPage 
             currentProduct={currentProduct} 
             initialPlanData={trendPlanData}
@@ -783,6 +808,8 @@ function App() {
             productContext={currentProduct}
             onCreatePlan={handleCreatePlanFromTrend}
           />
+        ) : normalizedSelectedCategory === 'AI工作台' ? (
+          <SmartMaterialPage currentProduct={currentProduct} />
         ) : normalizedSelectedCategory === '选题会议室' ? (
           <IdeationConference 
             currentUser={{ id: currentUserId }}
@@ -796,6 +823,8 @@ function App() {
           <PlatformLogoTest />
         ) : normalizedSelectedCategory === '个人信息' ? (
           <UserProfilePage currentUser={currentUser} email={userEmail} onUpdateUser={handleUpdateUser} />
+        ) : normalizedSelectedCategory === '产品路线图' ? (
+          <ProductRoadmap currentProduct={currentProduct} sources={sources} />
         ) : (normalizedSelectedCategory === '产品规划' || normalizedSelectedCategory === '产品资料管理' || normalizedSelectedCategory === '产品资料') ? (
           <ProductDataManager currentProduct={currentProduct} onUpdateProduct={handleUpdateProduct} />
         ) : (

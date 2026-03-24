@@ -278,7 +278,7 @@ export default function AiTopicGenerator({ currentProduct, onContentCreated }) {
       }
 
       await createContentItem(payload)
-      showToast('已添加到内容规划！', 'success')
+      showToast('已添加到排期公告板！', 'success')
       if (onContentCreated) onContentCreated()
       
       setGeneratedTopics(prev => prev.filter(t => t !== editingTopic))

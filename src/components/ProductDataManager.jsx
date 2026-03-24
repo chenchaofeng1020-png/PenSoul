@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react'
-import { Edit, Plus, Trash2, Save, X, Tag, Target, Lightbulb, Package, Settings, ChevronDown, ChevronUp, BookOpen, HelpCircle, Star, Sparkles, AlertCircle, Users, ArrowRight, Search, Zap, ExternalLink, Loader2, Copy, CheckCircle } from 'lucide-react'
+import { Edit, Plus, Trash2, Save, X, Tag, Target, Lightbulb, Package, Settings, ChevronDown, ChevronUp, BookOpen, HelpCircle, Star, Sparkles, AlertCircle, Users, ArrowRight, Search, Zap, ExternalLink, Loader2, Copy, CheckCircle, MessageSquare } from 'lucide-react'
 import { 
   getProductDetails, 
   updateProduct, 
@@ -14,7 +14,7 @@ import {
   listProductDocs,
   addProductDoc,
   deleteProductDoc,
-  listProductFaqs,
+  getProductFaqs,
   addProductFaq,
   deleteProductFaq,
   uploadProductLogo,
@@ -29,7 +29,11 @@ import {
   getProductMessaging,
   addProductMessaging,
   updateProductMessaging,
-  deleteProductMessaging
+  deleteProductMessaging,
+  getProductPersonas,
+  addProductPersona,
+  updateProductPersona,
+  deleteProductPersona
 } from '../services/api'
 import { useUI } from '../context/UIContext'
 import AiPositioningAssistant from './AiPositioningAssistant'
@@ -173,6 +177,14 @@ export default function ProductDataManager({ currentProduct, onUpdateProduct }) 
   const [isEditingHighlights, setIsEditingHighlights] = useState(false)
   const [isEditingTagline, setIsEditingTagline] = useState(false)
   const [isEditingProductIntro, setIsEditingProductIntro] = useState(false)
+
+  // User Personas State
+  const [personasData, setPersonasData] = useState([])
+  const [newPersona, setNewPersona] = useState({ name: '', role_tag: '', demographics: {}, pain_points: [], goals: [], behaviors: [], quote: '', is_primary: false })
+  const [editingPersonaIndex, setEditingPersonaIndex] = useState(null)
+  const [isAddingPersona, setIsAddingPersona] = useState(false)
+  const [personasLoaded, setPersonasLoaded] = useState(false)
+  const [personasLoading, setPersonasLoading] = useState(false)
 
   const [messagingRows, setMessagingRows] = useState([])
   const [newMessage, setNewMessage] = useState({ persona: '', channel: '', pain: '', anchor_message: '', benefit: '', evidence: '' })
@@ -468,7 +480,7 @@ export default function ProductDataManager({ currentProduct, onUpdateProduct }) 
       if (activeTab === 'faqs' && !faqsLoaded) {
         setFaqsLoading(true)
         try {
-          const data = await listProductFaqs(currentProduct.id)
+          const data = await getProductFaqs(currentProduct.id)
           setFaqs(data)
           setFaqsLoaded(true)
         } catch (e) {
@@ -516,7 +528,19 @@ export default function ProductDataManager({ currentProduct, onUpdateProduct }) 
         setFeatureCardsLoading(true)
         try {
           const data = await getProductFeatureCards(currentProduct.id)
-          setFeatureCards(data)
+          // 将数据库字段映射为前端字段
+          const mappedData = data.map(card => ({
+            id: card.id,
+            name: card.title || '',
+            module: card.icon || '',
+            launch_date: card.launch_date || '',
+            intro_source: card.intro_source || '',
+            intro_scenario: card.intro_scenario || '',
+            intro_problem: card.intro_problem || '',
+            intro_solution: card.intro_solution || card.description || '',
+            intro_effect: card.intro_effect || card.description || ''
+          }))
+          setFeatureCards(mappedData)
           setFeatureCardsLoaded(true)
         } catch (e) {
           setFeatureCards([])
@@ -534,6 +558,18 @@ export default function ProductDataManager({ currentProduct, onUpdateProduct }) 
           setMessagingRows([])
         } finally {
           setMessagingLoading(false)
+        }
+      }
+      if (activeTab === 'personas' && !personasLoaded) {
+        setPersonasLoading(true)
+        try {
+          const data = await getProductPersonas(currentProduct.id)
+          setPersonasData(data)
+          setPersonasLoaded(true)
+        } catch (e) {
+          setPersonasData([])
+        } finally {
+          setPersonasLoading(false)
         }
       }
     }
@@ -655,6 +691,58 @@ export default function ProductDataManager({ currentProduct, onUpdateProduct }) 
     }
   }
 
+  // --- User Personas Handlers ---
+  const handleSavePersona = async () => {
+    if (!newPersona.name.trim()) {
+      showToast('请输入用户画像名称', 'warning')
+      return
+    }
+    
+    try {
+      if (editingPersonaIndex !== null) {
+        // 更新
+        const personaToUpdate = personasData[editingPersonaIndex]
+        if (personaToUpdate?.id) {
+          const updated = await updateProductPersona(personaToUpdate.id, newPersona)
+          setPersonasData(curr => {
+            const n = [...curr]
+            n[editingPersonaIndex] = updated
+            return n
+          })
+          showToast('用户画像已更新', 'success')
+        }
+      } else {
+        // 新建
+        const inserted = await addProductPersona(currentProduct.id, newPersona)
+        setPersonasData([...personasData, inserted])
+        showToast('用户画像已添加', 'success')
+      }
+      
+      setIsAddingPersona(false)
+      setEditingPersonaIndex(null)
+      setNewPersona({ name: '', role_tag: '', demographics: {}, pain_points: [], goals: [], behaviors: [], quote: '', is_primary: false })
+    } catch (err) {
+      showToast('保存失败，请重试', 'error')
+      console.error('Save persona failed:', err)
+    }
+  }
+
+  const handleDeletePersona = async (personaId, index) => {
+    if (!await confirm({ title: '删除用户画像', message: '确定要删除这个用户画像吗？' })) return
+    
+    const prevPersonas = [...personasData]
+    setPersonasData(personasData.filter((_, i) => i !== index))
+    
+    try {
+      await deleteProductPersona(personaId)
+      showToast('用户画像已删除', 'success')
+    } catch (err) {
+      showToast('删除失败，请重试', 'error')
+      setPersonasData(prevPersonas)
+      console.error('Delete persona failed:', err)
+    }
+  }
+
   // 切换章节展开/收起
   const toggleSection = (section) => {
     setExpandedSections({
@@ -725,8 +813,35 @@ export default function ProductDataManager({ currentProduct, onUpdateProduct }) 
                  } catch { showToast('保存失败', 'error') }
               } else if (type === 'feature') {
                  try {
-                    const inserted = await addProductFeatureCard(currentProduct.id, data)
-                    setFeatureCards([...featureCards, inserted])
+                    // 将 AI 返回的数据映射为 API 期望的字段
+                    const payload = {
+                      title: data.name || data.title,
+                      description: data.description || data.intro_effect || data.intro_solution,
+                      icon: data.module || data.icon || '',
+                      image_url: data.image_url || '',
+                      tags: data.tags || [],
+                      order: data.order || 0,
+                      launch_date: data.launch_date || null,
+                      intro_source: data.intro_source || '',
+                      intro_scenario: data.intro_scenario || '',
+                      intro_problem: data.intro_problem || '',
+                      intro_solution: data.intro_solution || '',
+                      intro_effect: data.intro_effect || ''
+                    }
+                    const inserted = await addProductFeatureCard(currentProduct.id, payload)
+                    // 将数据库返回的字段映射回前端字段
+                    const mappedInserted = {
+                      id: inserted.id,
+                      name: inserted.title || '',
+                      module: inserted.icon || '',
+                      launch_date: inserted.launch_date || '',
+                      intro_source: inserted.intro_source || '',
+                      intro_scenario: inserted.intro_scenario || '',
+                      intro_problem: inserted.intro_problem || '',
+                      intro_solution: inserted.intro_solution || inserted.description || '',
+                      intro_effect: inserted.intro_effect || inserted.description || ''
+                    }
+                    setFeatureCards([...featureCards, mappedInserted])
                     showToast('已添加功能特性')
                  } catch { showToast('保存失败', 'error') }
               } else if (type === 'messaging') {
@@ -749,10 +864,9 @@ export default function ProductDataManager({ currentProduct, onUpdateProduct }) 
           <div className="flex items-center space-x-2 mb-4 overflow-x-auto">
             {[
               { key: 'wizard', label: '产品定义' },
-              { key: 'stories', label: '用户画像' },
+              { key: 'personas', label: '用户画像' },
+              { key: 'stories', label: '用户故事' },
               { key: 'featureCards', label: '功能卡片' },
-              { key: 'messaging', label: '产品介绍' },
-              { key: 'docs', label: '资料库' },
               { key: 'faqs', label: 'FAQ' },
             ].map((t) => (
               <button
@@ -1278,7 +1392,7 @@ export default function ProductDataManager({ currentProduct, onUpdateProduct }) 
                         className="inline-flex items-center space-x-2 bg-blue-600 text-white px-3 py-2 rounded-md text-sm"
                         onClick={async () => {
                           const { name, module, launch_date, intro_source, intro_scenario, intro_problem, intro_solution, intro_effect } = newFeatureCard
-                          if (!name.trim() || !module.trim() || !launch_date) return
+                          if (!name.trim() || !module.trim()) return
                           if (![intro_source, intro_scenario, intro_problem, intro_solution, intro_effect].some(v => (v || '').trim())) return
                           
                           try {
@@ -1297,9 +1411,37 @@ export default function ProductDataManager({ currentProduct, onUpdateProduct }) 
                                 setEditingFeatureIndex(null)
                                 setIsAddingFeatureCard(false)
 
+                                // 将前端字段映射为 API 期望的字段
+                                const payload = { 
+                                  title: newFeatureCard.name,
+                                  description: newFeatureCard.intro_effect || newFeatureCard.intro_solution,
+                                  icon: newFeatureCard.module,
+                                  image_url: '',
+                                  tags: [],
+                                  order: 0,
+                                  launch_date: newFeatureCard.launch_date || null,
+                                  intro_source: newFeatureCard.intro_source,
+                                  intro_scenario: newFeatureCard.intro_scenario,
+                                  intro_problem: newFeatureCard.intro_problem,
+                                  intro_solution: newFeatureCard.intro_solution,
+                                  intro_effect: newFeatureCard.intro_effect
+                                }
+
                                 try {
-                                  const updated = await updateProductFeatureCard(cardToUpdate.id, newFeatureCard)
-                                  setFeatureCards(prev => prev.map(c => c.id === cardToUpdate.id ? updated : c))
+                                  const updated = await updateProductFeatureCard(cardToUpdate.id, payload)
+                                  // 将数据库返回的字段映射回前端字段
+                                  const mappedUpdated = {
+                                    id: updated.id,
+                                    name: updated.title || '',
+                                    module: updated.icon || '',
+                                    launch_date: updated.launch_date || '',
+                                    intro_source: updated.intro_source || '',
+                                    intro_scenario: updated.intro_scenario || '',
+                                    intro_problem: updated.intro_problem || '',
+                                    intro_solution: updated.intro_solution || updated.description || '',
+                                    intro_effect: updated.intro_effect || updated.description || ''
+                                  }
+                                  setFeatureCards(prev => prev.map(c => c.id === cardToUpdate.id ? mappedUpdated : c))
                               } catch (e) {
                                   setFeatureCards(prevCards) // 回滚
                                   showToast('更新失败，已还原', 'error')
@@ -1313,15 +1455,41 @@ export default function ProductDataManager({ currentProduct, onUpdateProduct }) 
                             setFeatureCards([...featureCards, optimisticNew])
                             
                             // 立即关闭编辑框
-                            const payload = { ...newFeatureCard }
+                            // 将前端字段映射为 API 期望的字段
+                            const payload = { 
+                              title: newFeatureCard.name,
+                              description: newFeatureCard.intro_effect || newFeatureCard.intro_solution,
+                              icon: newFeatureCard.module,
+                              image_url: '',
+                              tags: [],
+                              order: 0,
+                              launch_date: newFeatureCard.launch_date || null,
+                              intro_source: newFeatureCard.intro_source,
+                              intro_scenario: newFeatureCard.intro_scenario,
+                              intro_problem: newFeatureCard.intro_problem,
+                              intro_solution: newFeatureCard.intro_solution,
+                              intro_effect: newFeatureCard.intro_effect
+                            }
                             setNewFeatureCard({ name: '', module: '', launch_date: '', intro_source: '', intro_scenario: '', intro_problem: '', intro_solution: '', intro_effect: '' })
                             setEditingFeatureIndex(null)
                             setIsAddingFeatureCard(false)
 
                             try {
                                 const inserted = await addProductFeatureCard(currentProduct.id, payload)
+                                // 将数据库返回的字段映射回前端字段
+                                const mappedInserted = {
+                                    id: inserted.id,
+                                    name: inserted.title || '',
+                                    module: inserted.icon || '',
+                                    launch_date: inserted.launch_date || '',
+                                    intro_source: inserted.intro_source || '',
+                                    intro_scenario: inserted.intro_scenario || '',
+                                    intro_problem: inserted.intro_problem || '',
+                                    intro_solution: inserted.intro_solution || inserted.description || '',
+                                    intro_effect: inserted.intro_effect || inserted.description || ''
+                                }
                                 // 用真实数据替换临时数据
-                                setFeatureCards(prev => prev.map(c => c.id === tempId ? inserted : c))
+                                setFeatureCards(prev => prev.map(c => c.id === tempId ? mappedInserted : c))
                             } catch (e) {
                                 // 失败回滚
                                 setFeatureCards(prev => prev.filter(c => c.id !== tempId))
@@ -2610,6 +2778,201 @@ export default function ProductDataManager({ currentProduct, onUpdateProduct }) 
                          <div className="bg-white/50 p-2 rounded border border-blue-100">
                          <div className="font-medium text-blue-800">Behavior (行为)</div>
                         <div className="text-xs text-blue-600">他们的典型行为与决策习惯，例如：常用移动端、偏好自动化。</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'personas' && (
+            <div className={`grid grid-cols-1 ${isAddingPersona ? 'lg:grid-cols-3' : 'lg:grid-cols-1'} gap-6`}>
+              <div className={isAddingPersona ? "lg:col-span-2" : "lg:col-span-1"}>
+                {!isAddingPersona ? (
+                  <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-gray-200 mb-6">
+                    <div>
+                      <h3 className="text-base font-semibold text-gray-900">目标用户画像</h3>
+                      <p className="text-xs text-gray-500 mt-1">已记录 {personasData.length} 个用户画像</p>
+                    </div>
+                    <button
+                      onClick={() => { setEditingPersonaIndex(null); setNewPersona({ name: '', role_tag: '', demographics: {}, pain_points: [], goals: [], behaviors: [], quote: '', is_primary: false }); setIsAddingPersona(true) }}
+                      className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>新建画像</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-xl border border-gray-200 p-6">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="text-base font-semibold text-gray-900">{editingPersonaIndex !== null ? '编辑用户画像' : '添加用户画像'}</h3>
+                      <span className="text-xs text-gray-500">定义目标用户的特征、目标和痛点</span>
+                    </div>
+                    <div className="space-y-5">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1.5">画像名称</label>
+                          <input
+                            type="text"
+                            value={newPersona.name}
+                            onChange={(e) => setNewPersona({ ...newPersona, name: e.target.value })}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                            placeholder="例如：忙碌的项目经理"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1.5">角色标签</label>
+                          <input
+                            type="text"
+                            value={newPersona.role_tag}
+                            onChange={(e) => setNewPersona({ ...newPersona, role_tag: e.target.value })}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                            placeholder="例如：技术团队负责人"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1.5">用户语录</label>
+                        <textarea
+                          value={newPersona.quote}
+                          onChange={(e) => setNewPersona({ ...newPersona, quote: e.target.value })}
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                          rows={2}
+                          placeholder="例如：我需要更高效的方式来管理项目进度..."
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="is_primary_persona"
+                          checked={newPersona.is_primary}
+                          onChange={(e) => setNewPersona({ ...newPersona, is_primary: e.target.checked })}
+                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                        <label htmlFor="is_primary_persona" className="text-sm text-gray-700">设为主要目标用户</label>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
+                        <button
+                          onClick={() => { setIsAddingPersona(false); setEditingPersonaIndex(null); setNewPersona({ name: '', role_tag: '', demographics: {}, pain_points: [], goals: [], behaviors: [], quote: '', is_primary: false }) }}
+                          className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition"
+                        >
+                          取消
+                        </button>
+                        <button
+                          onClick={handleSavePersona}
+                          disabled={personasLoading}
+                          className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-5 py-2 rounded-lg text-sm font-medium transition"
+                        >
+                          {personasLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                          <span>{editingPersonaIndex !== null ? '更新画像' : '保存画像'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {!isAddingPersona && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    {personasLoading ? (
+                      <div className="col-span-2 flex items-center justify-center py-12">
+                        <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+                      </div>
+                    ) : personasData.length === 0 ? (
+                      <div className="col-span-2 text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                        <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                        <p className="text-gray-500 text-sm">暂无用户画像</p>
+                        <p className="text-gray-400 text-xs mt-1">点击上方按钮创建第一个用户画像</p>
+                      </div>
+                    ) : (
+                      personasData.map((persona, idx) => (
+                        <div key={persona.id || idx} className="group relative bg-white rounded-xl border border-gray-200 hover:border-blue-200 transition-all duration-200 flex flex-col h-full overflow-hidden">
+                          <div className="p-5 border-b border-gray-50 bg-gray-50/30">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex gap-3">
+                                <div className="w-10 h-10 rounded-lg bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600 shrink-0">
+                                  <Users className="w-5 h-5" />
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <h3 className="font-bold text-gray-900 text-base">{persona.name}</h3>
+                                    {persona.is_primary && (
+                                      <span className="px-2 py-0.5 bg-amber-50 text-amber-700 text-xs font-medium rounded-full border border-amber-200 flex items-center gap-1">
+                                        <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                                        主要目标
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-sm text-gray-500 mt-0.5 font-medium">{persona.role_tag || '未设定角色标签'}</div>
+                                </div>
+                              </div>
+                              
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity absolute top-4 right-4 bg-white border border-gray-100 rounded-lg p-1">
+                                <button
+                                  aria-label="编辑用户画像"
+                                  className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition"
+                                  onClick={() => { setEditingPersonaIndex(idx); setNewPersona({ ...persona }); setIsAddingPersona(true) }}
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                                <div className="w-px h-3 bg-gray-200 mx-0.5"></div>
+                                <button
+                                  aria-label="删除用户画像"
+                                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition"
+                                  onClick={() => handleDeletePersona(persona.id, idx)}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="p-5 space-y-4 flex-1">
+                            {persona.quote && (
+                              <div className="bg-purple-50/50 rounded-lg p-3 border border-purple-100/50">
+                                <div className="flex items-center gap-2 text-xs font-bold text-purple-600 uppercase tracking-wider mb-1.5">
+                                  <MessageSquare className="w-3.5 h-3.5" /> 用户语录
+                                </div>
+                                <div className="text-sm text-gray-800 leading-relaxed italic">"{persona.quote}"</div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {isAddingPersona && (
+                <div className="space-y-6">
+                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-5 h-fit max-h-[80vh] overflow-y-auto">
+                    <div className="flex items-center gap-2 mb-3 text-blue-800">
+                      <Lightbulb className="w-5 h-5" />
+                      <h3 className="font-semibold">用户画像指南</h3>
+                    </div>
+                    <div className="space-y-4 text-sm text-blue-900">
+                      <div>
+                        <h4 className="font-medium mb-1">什么是目标用户画像？</h4>
+                        <p className="text-blue-700/80">目标用户画像是对产品核心用户群体的特征描述，帮助团队理解为谁构建产品。</p>
+                      </div>
+                      <div className="space-y-2">
+                        <h4 className="font-medium">核心要素</h4>
+                        <div className="bg-white/50 p-2 rounded border border-blue-100">
+                          <div className="font-medium text-blue-800">名称</div>
+                          <div className="text-xs text-blue-600">画像的称呼，例如：忙碌的项目经理</div>
+                        </div>
+                        <div className="bg-white/50 p-2 rounded border border-blue-100">
+                          <div className="font-medium text-blue-800">角色标签</div>
+                          <div className="text-xs text-blue-600">用户的职业或角色，例如：技术团队负责人</div>
+                        </div>
+                        <div className="bg-white/50 p-2 rounded border border-blue-100">
+                          <div className="font-medium text-blue-800">用户语录</div>
+                          <div className="text-xs text-blue-600">代表用户心声的典型语录</div>
                         </div>
                       </div>
                     </div>

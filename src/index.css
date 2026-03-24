@@ -13,9 +13,30 @@ body {
 }
 
 /* Custom Scrollbar Styles */
+
+/* 全局滚动条样式 - 更细更浅 */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #e5e7eb; /* gray-200 */
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #d1d5db; /* gray-300 */
+}
+
+/* hover-scrollbar 样式 */
 .hover-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 
 .hover-scrollbar::-webkit-scrollbar-track {
@@ -29,16 +50,29 @@ body {
 }
 
 .hover-scrollbar:hover::-webkit-scrollbar-thumb {
-  background-color: #e5e7eb; /* gray-200 */
+  background-color: #d1d5db; /* gray-300 */
 }
 
 /* Hide scrollbar */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
 .no-scrollbar {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+body.estimation-modal-open [data-resizable-divider="true"] {
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* 富文本编辑器样式 */

@@ -1,4 +1,4 @@
-import { Home, BarChart3, Settings, Users, Target, TrendingUp, ChevronDown, Plus, LogOut, Edit, Map, Zap, Cog, GitBranch, Layers, FileText, Calendar, Database, MessageSquare } from 'lucide-react'
+import { Home, BarChart3, Settings, Users, Target, ChevronDown, Plus, LogOut, Edit, Map, Zap, Cog, GitBranch, Layers, FileText, Calendar, Database, MessageSquare, BookOpen } from 'lucide-react'
 import { productDuckLogo } from '../assets/logos'
 import { useState, useEffect, useRef } from 'react'
 import AddProductModal from './AddProductModal'
@@ -67,14 +67,11 @@ const Sidebar = ({
   }
 
   const menuItems = [
+    { icon: <BookOpen className="w-5 h-5" />, label: 'AI工作台', path: '/smart-material' },
     { icon: '🗄️', label: '产品规划', path: '/planning' },
-    { icon: '📄', label: '竞品管理', path: '/competitors' },
-    { icon: '🎋', label: '产品路线图', path: '/roadmap' },
-    { icon: <TrendingUp className="w-5 h-5" />, label: '热点雷达', path: '/trends' },
-    { icon: '💡', label: '智能选题', path: '/smart-topic' },
-    { icon: <MessageSquare className="w-5 h-5" />, label: '选题会议室', path: '/ideation' },
+    { icon: <Calendar className="w-5 h-5" />, label: '产品路线图', path: '/roadmap' },
     { icon: <Users className="w-5 h-5" />, label: '人设实验室', path: '/personas' },
-    { icon: '📅', label: '内容规划', path: '/content' },
+    { icon: '📅', label: '排期公告板', path: '/content' },
     { icon: <Cog className="w-5 h-5" />, label: '系统设置', path: '/settings' },
   ]
 
@@ -235,7 +232,7 @@ const Sidebar = ({
       {/* 导航菜单 */}
       <nav className="flex-1 pl-4">
         <ul className="space-y-1">
-          {menuItems.filter(mi => !['产品路线图', '竞品管理', '热点雷达'].includes((mi.label || '').trim())).map((item, index) => {
+          {menuItems.map((item, index) => {
             const isSelected = selectedCategory === item.label
             return (
               <li key={index}>

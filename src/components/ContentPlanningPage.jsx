@@ -202,7 +202,7 @@ export default function ContentPlanningPage({ currentProduct, initialPlanData, o
         {isComposeOpen ? (
           <>
             <div className="flex items-center">
-              <button onClick={closeCompose} className="text-sm font-semibold text-gray-500 hover:text-gray-700 underline-offset-2 hover:underline">内容规划</button>
+              <button onClick={closeCompose} className="text-sm font-semibold text-gray-500 hover:text-gray-700 underline-offset-2 hover:underline">排期公告板</button>
               <span className="mx-2 text-gray-400">/</span>
               <div className="text-lg font-semibold text-gray-900">内容创作</div>
             </div>
@@ -215,7 +215,7 @@ export default function ContentPlanningPage({ currentProduct, initialPlanData, o
         ) : (
           <>
             <div className="flex items-center">
-              <div className="text-lg font-semibold text-gray-900">内容规划</div>
+              <div className="text-lg font-semibold text-gray-900">排期公告板</div>
             </div>
             <div className="flex items-center gap-3">
               <AiTopicGenerator currentProduct={currentProduct} onContentCreated={() => setRefreshTrigger(t => t + 1)} />

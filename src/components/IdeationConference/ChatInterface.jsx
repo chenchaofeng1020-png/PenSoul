@@ -1,71 +1,93 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, User, Bot, Loader2, FileText, ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
+import { Send, User, Bot, Loader2, FileText, ChevronRight, ExternalLink } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import ResearchProcess from './ResearchProcess';
 
-// Component for rendering Research Reports
-const ResearchReportCard = ({ content }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-
+// Component for rendering Research Notification (Button to open preview)
+const ResearchReportNotification = ({ content, onView }) => {
   // Simple parsing logic based on the format in index.jsx
   // "### 📄 全网调研报告\n\n> Summary...\n\n#### 📝 调研详情\nContent...\n\n#### 🔗 参考来源\nSources..."
   
   const summaryMatch = content.match(/> (.*?)\n\n/s);
   const summary = summaryMatch ? summaryMatch[1] : "点击查看调研详情";
   
+  // Pre-parse sources for display
   const detailParts = content.split('#### 📝 调研详情\n');
   const bodyAndSources = detailParts[1] || "";
-  
   const [reportBody, sourcesPart] = bodyAndSources.split('#### 🔗 参考来源');
   
+  const sources = [];
+  if (sourcesPart) {
+      const linkRegex = /\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g;
+      let match;
+      while ((match = linkRegex.exec(sourcesPart)) !== null) {
+          sources.push({ title: match[1], url: match[2] });
+      }
+  }
+  
+  // Extract data for preview
+  const handleView = () => {
+    onView({
+        title: '调研报告详情',
+        content: content, // Pass full content or constructed content
+        sources: sources
+    });
+  };
+  
   return (
-    <div className="bg-blue-50/50 border border-blue-100 rounded-lg overflow-hidden w-full max-w-2xl my-2">
+    <div className="bg-blue-50/50 border border-blue-100 rounded-lg overflow-hidden w-full max-w-sm my-2 shadow-sm">
       {/* Header */}
       <div 
-        className="flex items-start p-3 cursor-pointer hover:bg-blue-50 transition-colors"
-        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center p-3 cursor-pointer hover:bg-blue-100/50 transition-colors group"
+        onClick={handleView}
       >
-        <div className="flex-shrink-0 mt-1 mr-3 text-blue-500">
+        <div className="flex-shrink-0 mr-3 text-blue-500 bg-blue-100 p-2 rounded-lg group-hover:bg-blue-200 transition-colors">
            <FileText className="w-5 h-5" />
         </div>
         <div className="flex-1 min-w-0">
-           <div className="flex items-center justify-between mb-1">
-              <h3 className="text-sm font-semibold text-blue-800">全网调研报告</h3>
-              <div className="text-blue-400">
-                {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-              </div>
-           </div>
-           <p className="text-xs text-blue-600 line-clamp-2 leading-relaxed">
-             {summary}
+           <h3 className="text-sm font-semibold text-blue-800 mb-0.5">全网调研报告已生成</h3>
+           <p className="text-xs text-blue-600 line-clamp-1 opacity-80">
+             {summary.replace(/卓伟已完成对“|”的深度调研.*/g, '')}
            </p>
         </div>
+        <div className="text-blue-400 group-hover:translate-x-1 transition-transform">
+           <ChevronRight className="w-4 h-4" />
+        </div>
       </div>
-
-      {/* Expanded Content */}
-      {isExpanded && (
-        <div className="border-t border-blue-100 bg-white p-4 text-sm text-gray-700 space-y-4 animate-in slide-in-from-top-2 duration-200">
-           {/* Main Report */}
-           <div className="prose prose-sm max-w-none prose-blue">
-              <ReactMarkdown>{reportBody}</ReactMarkdown>
-           </div>
-           
-           {/* Sources */}
-           {sourcesPart && (
-             <div className="pt-3 border-t border-gray-100 mt-3">
-                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center">
-                  <ExternalLink className="w-3 h-3 mr-1" /> 参考来源
-                </h4>
-                <div className="prose prose-sm max-w-none prose-a:text-blue-600 prose-ul:pl-0">
-                  <ReactMarkdown>{sourcesPart}</ReactMarkdown>
-                </div>
-             </div>
-           )}
+      
+      {/* Sources Preview */}
+      {sources.length > 0 && (
+        <div className="px-3 pb-3 pt-0">
+            <div className="h-px bg-blue-100 mb-2"></div>
+            <div className="text-xs text-blue-600/70 mb-1 font-medium">参考来源：</div>
+            <div className="space-y-1.5">
+                {sources.slice(0, 3).map((source, idx) => (
+                    <a 
+                        key={idx} 
+                        href={source.url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="flex items-start gap-1.5 text-xs text-blue-500 hover:text-blue-700 hover:underline group/link"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <span className="opacity-60 mt-0.5 text-[10px]">{idx + 1}.</span>
+                        <span className="truncate">{source.title}</span>
+                        <ExternalLink className="w-3 h-3 opacity-0 group-hover/link:opacity-100 transition-opacity flex-shrink-0" />
+                    </a>
+                ))}
+                {sources.length > 3 && (
+                    <div className="text-[10px] text-blue-400 pl-4">
+                        ... 还有 {sources.length - 3} 个来源
+                    </div>
+                )}
+            </div>
         </div>
       )}
     </div>
   );
 };
 
-const ChatInterface = ({ messages, onSendMessage, isTyping, isResearching, currentPersona, personas, currentPersonaId, onPersonaChange }) => {
+const ChatInterface = ({ messages, onSendMessage, isTyping, isResearching, researchPlan, currentPersona, personas, currentPersonaId, onPersonaChange, onViewReport }) => {
   const [input, setInput] = useState('');
   const messagesEndRef = useRef(null);
 
@@ -120,7 +142,7 @@ const ChatInterface = ({ messages, onSendMessage, isTyping, isResearching, curre
                   msg.content
                 ) : (
                   msg.content.startsWith('### 📄 全网调研报告') ? (
-                     <ResearchReportCard content={msg.content} />
+                     <ResearchReportNotification content={msg.content} onView={onViewReport} />
                   ) : (
                     <div className="prose prose-sm max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1">
                        <ReactMarkdown>{msg.content}</ReactMarkdown>
@@ -133,14 +155,13 @@ const ChatInterface = ({ messages, onSendMessage, isTyping, isResearching, curre
         ))}
         
         {isResearching && (
-          <div className="flex justify-start">
-             <div className="flex flex-row items-start space-x-3">
-              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mr-3">
+          <div className="flex justify-start w-full pr-4">
+             <div className="flex flex-row items-start space-x-3 w-full">
+              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mr-3 mt-1">
                  <span className="text-lg">🕵️</span>
               </div>
-              <div className="bg-white border border-blue-200 bg-blue-50 p-3 rounded-2xl rounded-tl-none shadow-sm flex items-center space-x-2">
-                <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
-                <span className="text-xs text-blue-700 font-medium">卓伟正在全网调研中...</span>
+              <div className="flex-1 max-w-2xl">
+                 <ResearchProcess plan={researchPlan} />
               </div>
             </div>
           </div>

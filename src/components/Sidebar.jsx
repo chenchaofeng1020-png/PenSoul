@@ -69,7 +69,6 @@ const Sidebar = ({
   const menuItems = [
     { icon: <BookOpen className="w-5 h-5" />, label: 'AI工作台', path: '/smart-material' },
     { icon: '🗄️', label: '产品规划', path: '/planning' },
-    { icon: <Calendar className="w-5 h-5" />, label: '产品路线图', path: '/roadmap' },
     { icon: <Users className="w-5 h-5" />, label: '人设实验室', path: '/personas' },
     { icon: '📅', label: '排期公告板', path: '/content' },
     { icon: <Cog className="w-5 h-5" />, label: '系统设置', path: '/settings' },

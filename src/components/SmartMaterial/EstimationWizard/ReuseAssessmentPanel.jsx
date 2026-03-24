@@ -14,18 +14,12 @@ export function ReuseAssessmentPanel({ value, onChange }) {
   return (
     <div className="bg-white p-7">
       <div className="mb-6">
-        <div>
-          <h4 className="flex items-center gap-2 text-lg font-black text-slate-800 tracking-tight">
-            功能满足情况
-          </h4>
-          <p className="mt-1.5 text-sm leading-relaxed text-slate-500 max-w-xl">
-            只需要判断当前需求和已有功能的匹配程度，再补充必要备注，后续 AI 评估会据此调整判断口径。
-          </p>
-        </div>
+        <h4 className="flex items-center gap-2 text-lg font-black text-slate-800 tracking-tight">
+          功能满足情况
+        </h4>
       </div>
 
       <div className="mb-6 space-y-2">
-        <label className="block text-sm font-bold text-slate-700">已有功能满足情况</label>
         <div className="flex flex-wrap gap-2.5">
           {FULFILLMENT_OPTIONS.map(option => {
             const active = selectedFulfillment.key === option.key;

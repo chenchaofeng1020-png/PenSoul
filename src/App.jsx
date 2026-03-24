@@ -375,10 +375,10 @@ function App() {
   const [competitors, setCompetitors] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState(() => {
-    let v = localStorage.getItem('selectedCategory') || '产品规划'
+    let v = localStorage.getItem('selectedCategory') || 'AI工作台'
     v = (v || '').trim()
     if (['产品路线图', '竞品管理'].includes(v)) {
-      v = '产品规划'
+      v = 'AI工作台'
     }
     if (v === '趋势雷达') {
       v = '热点内容'
@@ -528,7 +528,7 @@ function App() {
       setCurrentUserId(userId)
       localStorage.setItem('user_id', userId)
     }
-    setSelectedCategory('产品规划')
+    setSelectedCategory('AI工作台')
   }
 
   const handleLogout = () => {
